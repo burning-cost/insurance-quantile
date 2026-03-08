@@ -187,8 +187,8 @@ def ilf(
             return 1.0 - alpha_at_x
 
         # Integrate S(x) from 0 to L using the trapezoidal rule
-        e_min_basic = np.trapz(survival(x_basic), x_basic)
-        e_min_higher = np.trapz(survival(x_higher), x_higher)
+        e_min_basic = np.trapezoid(survival(x_basic), x_basic)
+        e_min_higher = np.trapezoid(survival(x_higher), x_higher)
 
         if e_min_basic <= 0:
             ilf_vals[i] = 1.0

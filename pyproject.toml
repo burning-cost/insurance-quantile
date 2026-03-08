@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "insurance-quantile"
+version = "0.1.0"
+description = "Actuarial tail risk quantile and expectile regression for UK personal lines pricing, wrapping CatBoost's native quantile/expectile loss"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Burning Cost", email = "pricing.frontier@gmail.com" },
+]
+keywords = [
+    "actuarial",
+    "quantile regression",
+    "expectile",
+    "catboost",
+    "insurance",
+    "tail risk",
+    "tvar",
+    "large loss",
+    "gbm",
+    "pricing",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Office/Business :: Financial",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "polars>=0.20",
+    "catboost>=1.2",
+    "scikit-learn>=1.3",
+]
+
+[project.optional-dependencies]
+plot = ["matplotlib>=3.6"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "matplotlib>=3.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/burningcost/insurance-quantile"
+Repository = "https://github.com/burningcost/insurance-quantile"
+Issues = "https://github.com/burningcost/insurance-quantile/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/insurance_quantile"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["src/insurance_quantile"]

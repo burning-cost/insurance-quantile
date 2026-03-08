@@ -32,7 +32,8 @@ headers = {
 }
 
 RUN_ID = uuid.uuid4().hex[:8]
-NOTEBOOK_PATH = "/Workspace/insurance-quantile/run_pytest"
+WORKSPACE_FOLDER = "/Workspace/insurance-quantile"
+NOTEBOOK_PATH = f"{WORKSPACE_FOLDER}/run_pytest"
 
 # ---------------------------------------------------------------------------
 # Read source files
@@ -185,6 +186,17 @@ def api_call(method: str, endpoint: str, body: dict | None = None):
         err_body = e.read().decode()
         raise RuntimeError(f"API {method} {endpoint} failed {e.code}: {err_body}")
 
+
+# ---------------------------------------------------------------------------
+# Ensure workspace folder exists
+# ---------------------------------------------------------------------------
+print(f"Creating workspace folder {WORKSPACE_FOLDER} ...")
+try:
+    api_call("POST", "api/2.0/workspace/mkdirs", {"path": WORKSPACE_FOLDER})
+    print("Folder ready.")
+except RuntimeError as exc:
+    # mkdirs is idempotent; if it already exists this may succeed anyway
+    print(f"mkdirs note: {exc}")
 
 # ---------------------------------------------------------------------------
 # Upload notebook

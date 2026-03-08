@@ -31,7 +31,7 @@ class TestExceedanceCurve:
         X, _ = exponential_data
         X_small = X.head(100)
         result = exceedance_curve(fitted_quantile_model, X_small, n_thresholds=100)
-        assert len(result) == 101  # linspace with 101 points from 0 to max
+        assert len(result) == 100  # linspace(0, max, 100) gives exactly 100 points
 
     def test_custom_thresholds(self, fitted_quantile_model, exponential_data):
         X, _ = exponential_data

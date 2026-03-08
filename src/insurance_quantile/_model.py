@@ -204,9 +204,14 @@ class QuantileGBM:
         self._models = []
 
         if self._spec.mode == "quantile":
-            # Single MultiQuantile model for all quantile levels
-            quantile_str = ",".join(str(q) for q in self._spec.quantiles)
-            params = {**base_params, "loss_function": f"MultiQuantile:alpha={quantile_str}"}
+            # Use Quantile loss for a single quantile level; MultiQuantile requires >= 2.
+            # MultiQuantile: single model, all quantiles at once (efficient, shared features).
+            if len(self._spec.quantiles) == 1:
+                alpha = self._spec.quantiles[0]
+                params = {**base_params, "loss_function": f"Quantile:alpha={alpha}"}
+            else:
+                quantile_str = ",".join(str(q) for q in self._spec.quantiles)
+                params = {**base_params, "loss_function": f"MultiQuantile:alpha={quantile_str}"}
             model = CatBoostRegressor(**params)
             model.fit(X_np, y_np, sample_weight=w_np)
             self._models = [model]

@@ -29,6 +29,9 @@ from __future__ import annotations
 import numpy as np
 import polars as pl
 
+# numpy<2.0 compat: trapezoid was added in 2.0, trapz deprecated in 2.0
+_trapezoid = getattr(np, "trapezoid", None) or np.trapz
+
 __all__ = [
     "large_loss_loading",
     "ilf",
@@ -187,8 +190,8 @@ def ilf(
             return 1.0 - alpha_at_x
 
         # Integrate S(x) from 0 to L using the trapezoidal rule
-        e_min_basic = np.trapezoid(survival(x_basic), x_basic)
-        e_min_higher = np.trapezoid(survival(x_higher), x_higher)
+        e_min_basic = _trapezoid(survival(x_basic), x_basic)
+        e_min_higher = _trapezoid(survival(x_higher), x_higher)
 
         if e_min_basic <= 0:
             ilf_vals[i] = 1.0

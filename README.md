@@ -1,4 +1,5 @@
 # insurance-quantile
+[![Tests](https://github.com/burning-cost/insurance-quantile/actions/workflows/tests.yml/badge.svg)](https://github.com/burning-cost/insurance-quantile/actions/workflows/tests.yml)
 
 Actuarial tail risk quantile and expectile regression for UK personal lines pricing.
 

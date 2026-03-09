@@ -22,7 +22,7 @@ CatBoost's `MultiQuantile` loss trains a single model for all quantile levels si
 
 For heavy-tailed lines (motor BI, liability), expectile mode is available. Expectile regression has a property quantile regression lacks: it is both **coherent** (satisfies subadditivity) and **elicitable** (has a proper scoring rule). This makes it backtestable and suitable for ORSA and Solvency II reporting.
 
-## Install
+## Installation
 
 ```bash
 pip install insurance-quantile
@@ -89,7 +89,7 @@ Most personal lines portfolios have a large mass of zero claims. There are two w
 
 ## Integration with insurance-conformal
 
-QuantileGBM output feeds directly into [insurance-conformal](https://github.com/burningcost/insurance-conformal) for Conformalized Quantile Regression (CQR):
+QuantileGBM output feeds directly into [insurance-conformal](https://github.com/burning-cost/insurance-conformal) for Conformalized Quantile Regression (CQR):
 
 ```python
 from insurance_quantile import QuantileGBM
@@ -112,6 +112,21 @@ cqr.fit(y_cal, preds_cal["q_0.05"], preds_cal["q_0.95"])
 **TVaR approximation**: we estimate TVaR by taking the mean of quantile predictions at levels above alpha. Accuracy improves with the number of high quantile levels in the model — include 0.95, 0.99 at minimum for TVaR at alpha=0.9.
 
 **ILF integration**: `E[min(Y, L)] = integral_0^L P(Y > x) dx`, integrated numerically using the trapezoidal rule over the interpolated survival function from quantile predictions. 200 integration points is sufficient for smooth severity distributions.
+
+## Related libraries
+
+| Library | Why it's relevant |
+|---------|------------------|
+| [insurance-conformal](https://github.com/burning-cost/insurance-conformal) | Conformalized Quantile Regression — wraps this library's output to give distribution-free coverage guarantees |
+| [insurance-distributional](https://github.com/burning-cost/insurance-distributional) | Parametric severity distributions (Pareto, Gamma, LogNormal) — alternative approach when you need closed-form tail quantities |
+| [shap-relativities](https://github.com/burning-cost/shap-relativities) | Extract what's driving the tail — SHAP values on the QuantileGBM output |
+| [insurance-cv](https://github.com/burning-cost/insurance-cv) | Walk-forward cross-validation for time-structured insurance data |
+
+[All Burning Cost libraries →](https://burning-cost.github.io)
+
+## Read more
+
+[Your Burning Cost Has a Tail Risk Problem](https://burning-cost.github.io/blog/insurance-quantile) — why Tweedie models systematically misprice tail risk and how quantile regression fills the gap.
 
 ## Requirements
 

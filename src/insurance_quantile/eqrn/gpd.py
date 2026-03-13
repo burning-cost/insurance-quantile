@@ -411,7 +411,7 @@ def eqrn_xl_layer(
     )  # (n_obs, n_grid)
 
     # Integrate using trapezoid rule: integral ≈ (b-a) * mean of trapezia
-    el = np.trapz(p_grid, t_grid, axis=1)
+    el = np.trapezoid(p_grid, t_grid, axis=1)
     return np.maximum(el, 0.0)
 
 

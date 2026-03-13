@@ -65,6 +65,12 @@ insurance_quantile/
   oep_curve            — occurrence exceedance probability (OEP)
   coverage_check       — calibration: observed vs expected coverage per quantile
   pinball_loss         — standard scoring rule for quantile regression
+
+insurance_quantile.eqrn/
+  EQRNModel            — extreme quantile regression neural network (Pasche & Engelke 2024)
+  EQRNDiagnostics      — GPD QQ, calibration, threshold stability plots
+  GPDNet               — feedforward network for covariate-dependent GPD parameters
+  IntermediateQuantileEstimator — K-fold OOF intermediate quantile estimation
 ```
 
 ## Expectile mode
@@ -127,6 +133,13 @@ cqr.fit(y_cal, preds_cal["q_0.05"], preds_cal["q_0.95"])
 ## Read more
 
 [Your Burning Cost Has a Tail Risk Problem](https://burning-cost.github.io/blog/insurance-quantile) — why Tweedie models systematically misprice tail risk and how quantile regression fills the gap.
+
+## Source repos
+
+This package consolidates two previously separate libraries:
+
+- `insurance-quantile` — core CatBoost quantile/expectile GBM (v0.1.x)
+- `insurance-eqrn` — archived, merged into `insurance_quantile.eqrn`
 
 ## Requirements
 

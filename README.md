@@ -119,6 +119,26 @@ cqr.fit(y_cal, preds_cal["q_0.05"], preds_cal["q_0.95"])
 
 **ILF integration**: `E[min(Y, L)] = integral_0^L P(Y > x) dx`, integrated numerically using the trapezoidal rule over the interpolated survival function from quantile predictions. 200 integration points is sufficient for smooth severity distributions.
 
+---
+
+## Performance
+
+Benchmarked against **parametric Gamma quantiles** (Gamma GLM + analytic quantile formula) on synthetic severity data with a heteroskedastic lognormal DGP where tail weight varies with a covariate. Full notebook: `notebooks/benchmark.py`.
+
+| Metric | Gamma GLM quantiles | QuantileGBM (insurance-quantile) |
+|--------|--------------------|---------------------------------|
+| Quantile calibration (90th / 95th / 99th) | systematically biased | near stated level |
+| TVaR accuracy vs DGP | underestimates for high-risk | near DGP truth |
+| Heteroskedastic coverage | poor (global shape parameter) | adapts per segment |
+| Pinball loss (99th percentile) | higher | lower |
+
+The key failure mode of the Gamma baseline is the global shape parameter: it cannot represent different tail weights for different risk segments. The QuantileGBM learns the conditional quantile function directly via CatBoost's MultiQuantile pinball loss — if a high-sum-insured segment genuinely has a heavier tail, the model learns that from the data.
+
+**When to use:** Large loss loading in ground-up pricing where severity is genuinely heteroskedastic (tail weight varies across risk segments). Reinsurance pricing where TVaR in a layer is the deliverable. Any application where the 95th or 99th percentile is the pricing input, not just the mean.
+
+**When NOT to use:** When the portfolio has only a few hundred large claims in the training period — the tail quantiles are estimated from very few data points regardless of method, and the parametric Gamma's regularisation may actually help. Also when the actuarial deliverable requires a smooth, monotone ILF curve — quantile regression is not constrained to be monotone in the limit dimension without additional work.
+
+
 ## Related libraries
 
 | Library | Why it's relevant |

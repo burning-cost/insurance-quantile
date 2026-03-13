@@ -1,5 +1,6 @@
 """
-Submit insurance-quantile pytest suite to Databricks serverless compute.
+Submit insurance-quantile pytest suite (v0.2.0, including EQRN subpackage)
+to Databricks serverless compute.
 
 Uses the REST API directly — no cluster spec required.
 """
@@ -33,7 +34,7 @@ headers = {
 
 RUN_ID = uuid.uuid4().hex[:8]
 WORKSPACE_FOLDER = "/Workspace/insurance-quantile"
-NOTEBOOK_PATH = f"{WORKSPACE_FOLDER}/run_pytest"
+NOTEBOOK_PATH = f"{WORKSPACE_FOLDER}/run_pytest_v2"
 
 # ---------------------------------------------------------------------------
 # Read source files
@@ -46,6 +47,7 @@ def read_file(path: str) -> str:
         return f.read()
 
 
+# Main package source files
 src_files = {
     "__init__.py":      read_file(f"{BASE}/src/insurance_quantile/__init__.py"),
     "_types.py":        read_file(f"{BASE}/src/insurance_quantile/_types.py"),
@@ -56,6 +58,17 @@ src_files = {
     "_exceedance.py":   read_file(f"{BASE}/src/insurance_quantile/_exceedance.py"),
 }
 
+# EQRN subpackage source files
+eqrn_src_files = {
+    "eqrn/__init__.py":      read_file(f"{BASE}/src/insurance_quantile/eqrn/__init__.py"),
+    "eqrn/gpd.py":           read_file(f"{BASE}/src/insurance_quantile/eqrn/gpd.py"),
+    "eqrn/network.py":       read_file(f"{BASE}/src/insurance_quantile/eqrn/network.py"),
+    "eqrn/intermediate.py":  read_file(f"{BASE}/src/insurance_quantile/eqrn/intermediate.py"),
+    "eqrn/model.py":         read_file(f"{BASE}/src/insurance_quantile/eqrn/model.py"),
+    "eqrn/diagnostics.py":   read_file(f"{BASE}/src/insurance_quantile/eqrn/diagnostics.py"),
+}
+
+# Original test files
 test_files = {
     "conftest.py":          read_file(f"{BASE}/tests/conftest.py"),
     "test_model.py":        read_file(f"{BASE}/tests/test_model.py"),
@@ -66,9 +79,24 @@ test_files = {
     "test_types.py":        read_file(f"{BASE}/tests/test_types.py"),
 }
 
-all_files = {**src_files, **test_files}
-src_file_names = set(src_files.keys())
-files_json = json.dumps(all_files)
+# EQRN test files
+eqrn_test_files = {
+    "eqrn/__init__.py":          "",
+    "eqrn/conftest.py":          read_file(f"{BASE}/tests/eqrn/conftest.py"),
+    "eqrn/test_gpd.py":          read_file(f"{BASE}/tests/eqrn/test_gpd.py"),
+    "eqrn/test_network.py":      read_file(f"{BASE}/tests/eqrn/test_network.py"),
+    "eqrn/test_intermediate.py": read_file(f"{BASE}/tests/eqrn/test_intermediate.py"),
+    "eqrn/test_model.py":        read_file(f"{BASE}/tests/eqrn/test_model.py"),
+    "eqrn/test_diagnostics.py":  read_file(f"{BASE}/tests/eqrn/test_diagnostics.py"),
+}
+
+all_src = {**src_files, **eqrn_src_files}
+all_tests = {**test_files, **eqrn_test_files}
+
+files_json = json.dumps({
+    "src": all_src,
+    "tests": all_tests,
+})
 
 pyproject_content = """[build-system]
 requires = ["hatchling"]
@@ -76,13 +104,18 @@ build-backend = "hatchling.build"
 
 [project]
 name = "insurance-quantile"
-version = "0.1.0"
+version = "0.2.0"
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.24",
     "polars>=0.20",
     "catboost>=1.2",
     "scikit-learn>=1.3",
+    "torch>=2.0",
+    "lightgbm>=4.0",
+    "scipy>=1.10",
+    "pandas>=2.0",
+    "matplotlib>=3.6",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -94,7 +127,7 @@ pyproject_json = json.dumps(pyproject_content)
 # Build notebook source
 # ---------------------------------------------------------------------------
 NOTEBOOK_SOURCE = f"""# Databricks notebook source
-# MAGIC %pip install polars>=0.20 numpy>=1.24 catboost>=1.2 scikit-learn>=1.3 pytest>=7.0 hatchling --quiet
+# MAGIC %pip install polars>=0.20 numpy>=1.24 catboost>=1.2 scikit-learn>=1.3 torch>=2.0 lightgbm>=4.0 scipy>=1.10 pandas>=2.0 matplotlib>=3.6 pytest>=7.0 hatchling --quiet
 
 # COMMAND ----------
 
@@ -103,30 +136,39 @@ import json, os, sys, uuid, subprocess
 pkg_id = uuid.uuid4().hex[:8]
 pkg_dir = f"/tmp/insurance_quantile_{{pkg_id}}"
 src_dir = f"{{pkg_dir}}/src/insurance_quantile"
+eqrn_src_dir = f"{{src_dir}}/eqrn"
 tests_dir = f"{{pkg_dir}}/tests"
-os.makedirs(src_dir, exist_ok=True)
-os.makedirs(tests_dir, exist_ok=True)
+eqrn_tests_dir = f"{{tests_dir}}/eqrn"
+
+for d in [src_dir, eqrn_src_dir, tests_dir, eqrn_tests_dir]:
+    os.makedirs(d, exist_ok=True)
 
 FILES_JSON = {files_json!r}
 PYPROJECT_JSON = {pyproject_json!r}
-SRC_FILE_NAMES = {json.dumps(list(src_file_names))!r}
 
-files_map = json.loads(FILES_JSON)
+data = json.loads(FILES_JSON)
 pyproject_src = json.loads(PYPROJECT_JSON)
-src_names = set(json.loads(SRC_FILE_NAMES))
 
-for name, content in files_map.items():
-    if name in src_names:
-        path = f"{{src_dir}}/{{name}}"
-    else:
-        path = f"{{tests_dir}}/{{name}}"
-    with open(path, "w") as f:
-        f.write(content)
+# Write source files
+for name, content in data["src"].items():
+    path = f"{{src_dir}}/{{name}}"
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as fh:
+        fh.write(content)
 
-with open(f"{{pkg_dir}}/pyproject.toml", "w") as f:
-    f.write(pyproject_src)
+# Write test files
+for name, content in data["tests"].items():
+    path = f"{{tests_dir}}/{{name}}"
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as fh:
+        fh.write(content)
 
-print(f"Written {{len(files_map) + 1}} files to {{pkg_dir}}")
+with open(f"{{pkg_dir}}/pyproject.toml", "w") as fh:
+    fh.write(pyproject_src)
+
+n_src = len(data["src"])
+n_tests = len(data["tests"])
+print(f"Written {{n_src}} source files and {{n_tests}} test files to {{pkg_dir}}")
 
 # COMMAND ----------
 
@@ -135,9 +177,9 @@ r = subprocess.run(
     capture_output=True, text=True
 )
 if r.returncode != 0:
-    print("Install error:", r.stderr[:1000])
+    print("Install error:", r.stderr[:2000])
 else:
-    print("insurance-quantile installed from", pkg_dir)
+    print("insurance-quantile v0.2.0 installed from", pkg_dir)
 
 # COMMAND ----------
 
@@ -147,9 +189,9 @@ r = subprocess.run(
     capture_output=True, text=True, cwd=pkg_dir
 )
 
-print(r.stdout[-8000:])
+print(r.stdout[-12000:])
 if r.stderr:
-    print("STDERR:", r.stderr[-1000:])
+    print("STDERR:", r.stderr[-2000:])
 
 if r.returncode == 0:
     print("\\n=== ALL TESTS PASSED ===")
@@ -195,7 +237,6 @@ try:
     api_call("POST", "api/2.0/workspace/mkdirs", {"path": WORKSPACE_FOLDER})
     print("Folder ready.")
 except RuntimeError as exc:
-    # mkdirs is idempotent; if it already exists this may succeed anyway
     print(f"mkdirs note: {exc}")
 
 # ---------------------------------------------------------------------------
@@ -218,7 +259,7 @@ print("Upload OK")
 # ---------------------------------------------------------------------------
 print(f"Submitting serverless run {RUN_ID} ...")
 submit_body = {
-    "run_name": f"insurance-quantile-pytest-{RUN_ID}",
+    "run_name": f"insurance-quantile-pytest-v0.2.0-{RUN_ID}",
     "tasks": [
         {
             "task_key": "pytest",
@@ -238,7 +279,7 @@ print(f"Run submitted: run_id={run_id}")
 # ---------------------------------------------------------------------------
 print("Polling ...")
 lc, rs = "PENDING", "-"
-for i in range(120):
+for i in range(180):
     time.sleep(15)
     run_state = api_call("GET", f"api/2.1/jobs/runs/get?run_id={run_id}")
     lc = run_state.get("state", {}).get("life_cycle_state", "UNKNOWN")
@@ -266,7 +307,7 @@ try:
     if error_trace:
         print(f"Trace:\n{error_trace[:3000]}")
     if logs:
-        print(f"\nLogs:\n{logs[-8000:]}")
+        print(f"\nLogs:\n{logs[-12000:]}")
 except Exception as e:
     print(f"Could not fetch output: {e}")
 

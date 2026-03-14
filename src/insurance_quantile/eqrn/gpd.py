@@ -23,6 +23,10 @@ import torch
 import torch.nn.functional as F
 from scipy import stats
 
+# numpy<2.0 compat: trapezoid was added in 2.0, trapz deprecated/removed in 2.0
+if not hasattr(np, "trapezoid"):
+    np.trapezoid = np.trapz  # type: ignore[attr-defined]
+
 # Type alias for values that can be either numpy or torch
 ArrayLike = Union[np.ndarray, float]
 

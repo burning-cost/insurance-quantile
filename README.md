@@ -40,25 +40,31 @@ from insurance_quantile import QuantileGBM, per_risk_tvar, large_loss_loading
 rng = np.random.default_rng(42)
 n = 1_000
 
-vehicle_age  = rng.integers(1, 15, n).astype(float)
-driver_age   = rng.integers(21, 75, n).astype(float)
-ncd_years    = rng.integers(0, 9, n).astype(float)
+vehicle_age   = rng.integers(1, 15, n).astype(float)
+driver_age    = rng.integers(21, 75, n).astype(float)
+ncd_years     = rng.integers(0, 9, n).astype(float)
 vehicle_group = rng.choice([1.0, 2.0, 3.0, 4.0], size=n)  # encoded as float
-exposure     = rng.uniform(0.3, 1.0, n)
+exposure      = rng.uniform(0.3, 1.0, n)
 
 # Heteroskedastic lognormal severity: tail weight increases with vehicle group
 log_mu    = 6.5 + 0.03 * vehicle_age - 0.01 * ncd_years + 0.1 * vehicle_group
 log_sigma = 0.5 + 0.05 * vehicle_group   # tail weight varies by segment
 claim_amount = np.exp(rng.normal(log_mu, log_sigma, n))
 
-# Feature matrix
-X = np.column_stack([vehicle_age, driver_age, ncd_years, vehicle_group])
-y = claim_amount
+# Feature matrix — QuantileGBM requires Polars input
+feature_names = ["vehicle_age", "driver_age", "ncd_years", "vehicle_group"]
+X = pl.DataFrame({
+    "vehicle_age":   vehicle_age,
+    "driver_age":    driver_age,
+    "ncd_years":     ncd_years,
+    "vehicle_group": vehicle_group,
+})
+y = pl.Series("claim_amount", claim_amount)
 
 idx_train, idx_val = train_test_split(np.arange(n), test_size=0.2, random_state=42)
 X_train, X_val       = X[idx_train], X[idx_val]
 y_train, y_val       = y[idx_train], y[idx_val]
-exposure_train       = exposure[idx_train]
+exposure_train       = pl.Series("exposure", exposure[idx_train])
 
 # Fit quantile GBM
 model = QuantileGBM(
@@ -78,7 +84,7 @@ tvar = per_risk_tvar(model, X_val, alpha=0.95)
 from catboost import CatBoostRegressor
 tweedie_model = CatBoostRegressor(loss_function="Tweedie:variance_power=1.5",
                                   iterations=200, verbose=0)
-tweedie_model.fit(X_train, y_train)
+tweedie_model.fit(X_train.to_numpy(), y_train.to_numpy())
 loading = large_loss_loading(tweedie_model, model, X_val, alpha=0.95)
 ```
 
@@ -107,6 +113,7 @@ insurance_quantile.eqrn/
 
 ```python
 # For motor bodily injury or other heavy-tailed lines
+# X_train and y_train are pl.DataFrame and pl.Series as in the quick start above.
 model = QuantileGBM(
     quantiles=[0.5, 0.75, 0.9, 0.95],
     use_expectile=True,  # fits separate CatBoost model per alpha
@@ -129,16 +136,17 @@ QuantileGBM output feeds directly into [insurance-conformal](https://github.com/
 
 ```python
 import numpy as np
+import polars as pl
 from sklearn.model_selection import train_test_split
 from insurance_quantile import QuantileGBM
 from insurance_conformal import ConformalQuantileRegressor
 
-# Assumes X and y defined as in the quick start above.
+# Assumes X and y defined as pl.DataFrame and pl.Series as in the quick start above.
 # Split into train / calibration sets for conformal coverage guarantee.
 idx_tr, idx_cal = train_test_split(np.arange(len(X_train) + len(X_val)),
                                    test_size=0.25, random_state=0)
-X_all = np.vstack([X_train, X_val])
-y_all = np.concatenate([y_train, y_val])
+X_all = pl.concat([X_train, X_val])
+y_all = pl.concat([y_train, y_val])
 X_tr2, X_cal2 = X_all[idx_tr], X_all[idx_cal]
 y_tr2, y_cal2 = y_all[idx_tr], y_all[idx_cal]
 

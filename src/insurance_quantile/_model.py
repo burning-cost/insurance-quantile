@@ -32,13 +32,17 @@ from ._types import QuantileSpec, TailModel
 __all__ = ["QuantileGBM"]
 
 
-def _to_numpy(df: pl.DataFrame) -> np.ndarray:
-    """Convert a Polars DataFrame to a float64 numpy array."""
+def _to_numpy(df) -> np.ndarray:
+    """Convert a Polars DataFrame or numpy array to a float64 numpy array."""
+    if isinstance(df, np.ndarray):
+        return df.astype(np.float64)
     return df.to_numpy().astype(np.float64)
 
 
-def _series_to_numpy(s: pl.Series) -> np.ndarray:
-    """Convert a Polars Series to a float64 numpy array."""
+def _series_to_numpy(s) -> np.ndarray:
+    """Convert a Polars Series or numpy array to a float64 numpy array."""
+    if isinstance(s, np.ndarray):
+        return s.astype(np.float64)
     return s.to_numpy().astype(np.float64)
 
 

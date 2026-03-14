@@ -230,7 +230,7 @@ class QuantileGBM:
         self._metadata = TailModel(
             spec=self._spec,
             n_features=X_np.shape[1],
-            feature_names=list(X.columns),
+            feature_names=list(X.columns) if hasattr(X, 'columns') else [f'x{i}' for i in range(X_np.shape[1])],
             n_training_rows=X_np.shape[0],
             catboost_params=base_params,
             fix_crossing=self._fix_crossing,

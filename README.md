@@ -188,6 +188,11 @@ The key failure mode of the Gamma baseline is the global shape parameter: it can
 **When NOT to use:** When the portfolio has only a few hundred large claims in the training period — the tail quantiles are estimated from very few data points regardless of method, and the parametric Gamma's regularisation may actually help. Also when the actuarial deliverable requires a smooth, monotone ILF curve — quantile regression is not constrained to be monotone in the limit dimension without additional work.
 
 
+
+## Databricks Notebook
+
+A ready-to-run Databricks notebook benchmarking this library against standard approaches is available in [burning-cost-examples](https://github.com/burning-cost/burning-cost-examples/blob/main/notebooks/insurance_quantile_demo.py).
+
 ## Related libraries
 
 | Library | Why it's relevant |

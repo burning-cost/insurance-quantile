@@ -218,6 +218,15 @@ This package consolidates two previously separate libraries:
 - scikit-learn >= 1.3
 - numpy >= 1.24
 
+
+## Related Libraries
+
+| Library | What it does |
+|---------|-------------|
+| [insurance-severity](https://github.com/burning-cost/insurance-severity) | Composite Pareto-Gamma severity models — parametric alternative when closed-form ILFs and tail quantities are required |
+| [insurance-conformal](https://github.com/burning-cost/insurance-conformal) | Conformal prediction intervals — wrap quantile GBM output with distribution-free coverage guarantees |
+| [insurance-distributional](https://github.com/burning-cost/insurance-distributional) | Parametric severity distributions — alternative approach when you need the full distributional shape, not just quantile levels |
+
 ## Licence
 
 MIT

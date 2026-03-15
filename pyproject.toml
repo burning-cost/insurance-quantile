@@ -66,6 +66,7 @@ dev = [
 Homepage = "https://github.com/burning-cost/insurance-quantile"
 Repository = "https://github.com/burning-cost/insurance-quantile"
 Issues = "https://github.com/burning-cost/insurance-quantile/issues"
+Documentation = "https://github.com/burning-cost/insurance-quantile#readme"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/insurance_quantile"]

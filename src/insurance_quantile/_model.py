@@ -287,82 +287,51 @@ class QuantileGBM:
         self,
         X: pl.DataFrame,
         alpha: float,
-        n_grid: int = 99,
     ) -> pl.Series:
         """
         Estimate Tail Value at Risk (TVaR) at level alpha for each risk.
 
         TVaR_alpha = E[Y | Y > VaR_alpha(Y)].
 
-        Approximation method: fit a temporary model on a fine grid of quantile
-        levels from alpha to 0.999, then take the mean of predictions above
-        alpha. This is equivalent to numerically integrating the quantile
-        function above alpha.
-
-        If the model already covers quantiles above alpha, uses those directly.
-        Otherwise fits a temporary fine-grid model — caller should prefer to
-        pass a model with enough quantile coverage.
+        Uses the quantile levels already stored in this model that lie above
+        alpha. Requires at least 3 such levels for a reasonable approximation;
+        caller should fit with quantiles=[0.5, 0.75, 0.9, 0.95, 0.99] or similar.
 
         Parameters
         ----------
         X:
             Feature matrix.
         alpha:
-            Probability threshold, e.g. 0.95 for TVaR_95.
-        n_grid:
-            Number of quantile levels to use above alpha when approximating.
-            Higher values give more accurate TVaR at the cost of more
-            CatBoost predictions (not re-fitting). Default 99.
+            Probability threshold, e.g. 0.95 for TVaR_95. Must be below the
+            highest quantile level the model was fitted with.
 
         Returns
         -------
         Polars Series of TVaR estimates, one per row of X.
+
+        Raises
+        ------
+        ValueError
+            If the model has no fitted quantile levels above alpha.
         """
         if not self._is_fitted:
             raise RuntimeError("Model is not fitted. Call fit() first.")
         if not (0.0 < alpha < 1.0):
             raise ValueError(f"alpha must be in (0, 1), got {alpha}")
 
-        X_np = _to_numpy(X)
-
-        # Find which stored quantile levels are above alpha
+        # Use stored quantile levels above alpha
         above_alpha = [q for q in self._spec.quantiles if q > alpha]
 
-        if len(above_alpha) >= 3:
-            # Use stored predictions for quantile levels above alpha
-            col_names = [f"q_{q}" for q in above_alpha]
-            preds_df = self.predict(X)
-            tail_vals = np.stack([preds_df[c].to_numpy() for c in col_names], axis=1)
-        else:
-            # Build a temporary fine grid above alpha
-            grid = list(np.linspace(alpha + 0.001, 0.999, n_grid))
-            grid_str = ",".join(f"{q:.4f}" for q in grid)
-
-            base_params: dict[str, Any] = {
-                k: v
-                for k, v in self._metadata.catboost_params.items()
-                if k != "loss_function"
-            }
-            from catboost import CatBoostRegressor
-
-            tmp_model = CatBoostRegressor(
-                **base_params,
-                loss_function=f"MultiQuantile:alpha={grid_str}",
+        if not above_alpha:
+            raise ValueError(
+                f"Model has no quantile levels above alpha={alpha}. "
+                "Add higher quantiles (e.g. 0.99) or call predict_tvar "
+                "with a lower alpha."
             )
-            # We cannot re-fit without y; use the stored model's predictions
-            # as a proxy: interpolate from existing quantile predictions.
-            # This fallback only triggers when the user has too few quantiles.
-            # In practice, recommend quantiles=[0.5, 0.75, 0.9, 0.95, 0.99].
-            above_any = [q for q in self._spec.quantiles if q > alpha]
-            if not above_any:
-                raise ValueError(
-                    f"Model has no quantile levels above alpha={alpha}. "
-                    "Add higher quantiles (e.g. 0.99) or call predict_tvar "
-                    "with a lower alpha."
-                )
-            col_names = [f"q_{q}" for q in above_any]
-            preds_df = self.predict(X)
-            tail_vals = np.stack([preds_df[c].to_numpy() for c in col_names], axis=1)
+
+        col_names = [f"q_{q}" for q in above_alpha]
+        preds_df = self.predict(X)
+        tail_vals = np.stack([preds_df[c].to_numpy() for c in col_names], axis=1)
 
         tvar = tail_vals.mean(axis=1)
         return pl.Series("tvar", tvar)

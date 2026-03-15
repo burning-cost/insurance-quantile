@@ -156,3 +156,71 @@ class TestExceedanceCurveDataclass:
         assert df.shape == (3, 2)
         assert df["threshold"].to_list() == [0.0, 1.0, 2.0]
         assert df["exceedance_prob"].to_list() == [0.9, 0.5, 0.1]
+
+
+class TestRegressionP1OEPWarning:
+    """
+    Regression tests for P1-2: oep_curve() with independence_assumption=False
+    previously returned mean per-risk exceedance probability without any indication
+    that it was NOT the portfolio OEP. The fix adds a UserWarning.
+    """
+
+    def test_default_mode_emits_warning(self, fitted_quantile_model, exponential_data):
+        """oep_curve() with independence_assumption=False must emit a UserWarning."""
+        import warnings
+
+        X, _ = exponential_data
+        X_small = X.head(50)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            oep_curve(fitted_quantile_model, X_small)
+            user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+            assert len(user_warnings) >= 1, (
+                "Expected UserWarning for independence_assumption=False, got none"
+            )
+            assert "mean" in str(user_warnings[0].message).lower() or \
+                   "exceedance" in str(user_warnings[0].message).lower(), (
+                f"Warning message should mention 'mean exceedance': {user_warnings[0].message}"
+            )
+
+    def test_independence_mode_no_warning(self, fitted_quantile_model, exponential_data):
+        """oep_curve() with independence_assumption=True must NOT emit a UserWarning."""
+        import warnings
+
+        X, _ = exponential_data
+        X_small = X.head(50)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            oep_curve(fitted_quantile_model, X_small, independence_assumption=True)
+            user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+            assert len(user_warnings) == 0, (
+                f"Unexpected UserWarning for independence_assumption=True: {[str(x.message) for x in user_warnings]}"
+            )
+
+    def test_independence_oep_geq_mean_exceedance_at_low_threshold(
+        self, fitted_quantile_model, exponential_data
+    ):
+        """
+        For independent risks, the true OEP (P(max > x)) is always >= mean exceedance
+        P(Y_i > x) when n > 1. This invariant confirms the two branches compute
+        different quantities.
+        """
+        import warnings
+
+        X, _ = exponential_data
+        X_small = X.head(100)
+        thresholds = [0.0, 0.5, 1.0]
+
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            oep_mean = oep_curve(
+                fitted_quantile_model, X_small, thresholds=thresholds, independence_assumption=False
+            )
+            oep_indep = oep_curve(
+                fitted_quantile_model, X_small, thresholds=thresholds, independence_assumption=True
+            )
+
+        # At threshold=0, independence OEP >= mean exceedance (for n>=2)
+        assert oep_indep.probabilities[0] >= oep_mean.probabilities[0] - 1e-6, (
+            "True OEP must be >= mean exceedance at threshold=0 for n>1 risks"
+        )

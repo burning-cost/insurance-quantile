@@ -133,11 +133,14 @@ def gpd_log_density(y: ArrayLike, xi: ArrayLike, sigma: ArrayLike, loc: ArrayLik
         log_scale - z,
         log_scale - (1.0 / xi + 1.0) * np.log1p(xi * z),
     )
-    # Mask invalid support
-    if xi >= 0:
-        valid = z >= 0
-    else:
-        valid = (z >= 0) & (z <= -1.0 / xi)
+    # Mask invalid support — use element-wise np.where to handle array xi
+    # For xi >= 0 the distribution is unbounded above; for xi < 0 it has an
+    # upper bound at -sigma/xi. A scalar 'if xi >= 0' raises ValueError for arrays.
+    valid = np.where(
+        xi >= 0,
+        z >= 0,
+        (z >= 0) & (z <= -1.0 / np.where(xi == 0, 1.0, xi)),
+    )
     return np.where(valid, log_density, -np.inf)
 
 
@@ -474,7 +477,13 @@ def ogpd_loss_tensor(
     # l = (1 + 1/xi) * log(inner) + log(nu) - log(xi+1)
     inner_safe = inner.clamp(min=1e-8)
     log_inner = torch.log(inner_safe)
-    gpd_case = (1.0 + 1.0 / xi.clamp(min=1e-8, max=10.0)) * log_inner + torch.log(nu) - torch.log(xi + 1.0)
+    # Do NOT clamp xi here: negative xi values must flow through unchanged so that
+    # (1 + 1/xi) is correctly negative. The near_zero branch handles |xi| < 1e-5.
+    # Only add a tiny epsilon to avoid exact division-by-zero at xi=0 in this branch
+    # (it is never selected there because near_zero gates it out), but we must not
+    # replace negative xi with a positive value.
+    xi_safe = torch.where(xi.abs() < 1e-8, torch.full_like(xi, 1e-8), xi)
+    gpd_case = (1.0 + 1.0 / xi_safe) * log_inner + torch.log(nu) - torch.log(xi + 1.0)
 
     # Case 2: xi near 0 — exponential limit: l = log(nu) + z/nu
     exp_case = torch.log(nu) + z / nu

@@ -439,3 +439,116 @@ class TestSigmaFromNuXi:
         xi = np.array([-0.3, 0.0, 0.5])
         sigma = sigma_from_nu_xi_numpy(nu, xi)
         assert np.all(sigma > 0)
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for P0 and P1 bug fixes
+# ---------------------------------------------------------------------------
+
+
+class TestRegressionP0OGPDLossNegativeXi:
+    """
+    Regression test for P0: ogpd_loss_tensor used xi.clamp(min=1e-8, max=10.0),
+    which replaced negative xi values with 1e-8, making (1+1/xi) ~1e8 instead of
+    the correct negative value. The fix uses xi_safe that preserves sign.
+    """
+
+    def test_negative_xi_loss_sign_correct(self):
+        """
+        For xi = -0.3, the coefficient (1 + 1/xi) = 1 + 1/(-0.3) ≈ -2.33.
+        With the old clamp (min=1e-8) this became +1e8, giving a huge positive loss.
+        The correct loss should be close to the analytical value.
+        """
+        z = torch.tensor([0.5])
+        nu = torch.tensor([2.0])
+        xi = torch.tensor([-0.3])
+
+        tensor_loss = ogpd_loss_tensor(z, nu, xi, reduction="none").item()
+        analytical_loss = ogpd_loss_analytical(0.5, 2.0, -0.3)
+
+        assert abs(tensor_loss - analytical_loss) < 1e-4, (
+            f"Tensor loss {tensor_loss:.6f} does not match analytical {analytical_loss:.6f} "
+            "for negative xi. The old xi.clamp(min=1e-8) bug would produce ~1e8 here."
+        )
+
+    def test_negative_xi_batch_agrees_with_analytical(self):
+        """Batch of mixed-sign xi should each match the analytical value."""
+        xi_vals = [-0.4, -0.2, -0.1, 0.3, 0.5]
+        z_val = 1.0
+        nu_val = 3.0
+
+        z = torch.tensor([z_val] * len(xi_vals))
+        nu = torch.tensor([nu_val] * len(xi_vals))
+        xi = torch.tensor(xi_vals)
+
+        losses = ogpd_loss_tensor(z, nu, xi, reduction="none")
+
+        for i, xi_v in enumerate(xi_vals):
+            # Check feasibility: inner = 1 + xi*(xi+1)*z/nu
+            inner = 1.0 + xi_v * (xi_v + 1.0) * z_val / nu_val
+            if inner <= 0:
+                # Infeasible: loss should be zero
+                assert losses[i].item() == 0.0
+            else:
+                expected = ogpd_loss_analytical(z_val, nu_val, xi_v)
+                assert abs(losses[i].item() - expected) < 1e-4, (
+                    f"xi={xi_v}: tensor={losses[i].item():.6f}, analytical={expected:.6f}"
+                )
+
+    def test_negative_xi_gradient_finite(self):
+        """Gradients for negative xi must be finite (not ~1e8 from the old clamp)."""
+        z = torch.tensor([0.5, 1.0, 0.8])
+        nu = torch.tensor([2.0, 3.0, 2.5], requires_grad=True)
+        xi = torch.tensor([-0.3, -0.2, -0.4], requires_grad=True)
+
+        loss = ogpd_loss_tensor(z, nu, xi, reduction="mean")
+        loss.backward()
+
+        assert torch.isfinite(xi.grad).all(), f"xi gradient contains inf/nan: {xi.grad}"
+        assert torch.isfinite(nu.grad).all(), f"nu gradient contains inf/nan: {nu.grad}"
+        # Old bug: xi.grad would be ~O(1e8); correct values are O(1)
+        assert xi.grad.abs().max().item() < 1e4, (
+            f"xi gradient suspiciously large: {xi.grad} — suggests the clamping bug is back"
+        )
+
+
+class TestRegressionP1GpdLogDensityArrayXi:
+    """
+    Regression test for P1-1: gpd_log_density raised ValueError for array xi
+    because 'if xi >= 0' is ambiguous for arrays. The fix uses np.where.
+    """
+
+    def test_array_xi_does_not_raise(self):
+        """Array xi must not raise ValueError ('truth value of array is ambiguous')."""
+        y = np.array([500.0, 1000.0, 2000.0, 500.0])
+        xi = np.array([0.3, -0.2, 0.4, -0.1])  # mixed positive and negative
+        sigma = np.array([2000.0, 2000.0, 2000.0, 2000.0])
+        # This should not raise; before the fix it raised ValueError
+        result = gpd_log_density(y, xi, sigma)
+        assert result.shape == (4,)
+
+    def test_mixed_xi_support_masking(self):
+        """
+        For xi < 0, the support upper bound is -sigma/xi.
+        Values above that bound should give -inf log density.
+        """
+        sigma = 1000.0
+        # xi = -0.5 -> upper bound = -1000/-0.5 = 2000
+        xi = np.array([-0.5, -0.5])
+        y = np.array([1500.0, 2500.0])  # 1500 inside, 2500 outside support
+        ld = gpd_log_density(y, xi=xi, sigma=sigma)
+        assert np.isfinite(ld[0]), "y=1500 should be inside support for xi=-0.5, sigma=1000"
+        assert ld[1] == -np.inf, "y=2500 should be outside support for xi=-0.5, sigma=1000"
+
+    def test_array_xi_matches_scalar_calls(self):
+        """Vectorised call with array xi should match calling per-element with scalar xi."""
+        y = np.array([300.0, 600.0, 900.0])
+        xi_arr = np.array([0.2, -0.3, 0.4])
+        sigma = 500.0
+
+        ld_array = gpd_log_density(y, xi=xi_arr, sigma=sigma)
+        ld_scalar = np.array([
+            gpd_log_density(y[i], xi=xi_arr[i], sigma=sigma)
+            for i in range(len(y))
+        ])
+        np.testing.assert_allclose(ld_array, ld_scalar, rtol=1e-10)

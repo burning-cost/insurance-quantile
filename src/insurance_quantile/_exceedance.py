@@ -22,6 +22,8 @@ useful as a risk profile summary.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import polars as pl
 
@@ -121,12 +123,21 @@ def oep_curve(
     a portfolio.
 
     Two methods:
-    1. Mean exceedance (default): returns the average P(Y_i > x) per risk.
-       This is appropriate for large homogeneous portfolios and is stable.
-    2. True OEP under independence: P(max > x) = 1 - product(1 - P(Y_i > x)).
-       Mathematically correct for independent risks but numerically unstable
-       for large portfolios (probability product underflows). Only use for
-       portfolios of <1000 risks.
+
+    1. **Mean exceedance** (``independence_assumption=False``, default):
+       Returns the average P(Y_i > x) per risk, i.e. the mean per-risk
+       exceedance probability. This is NOT the portfolio OEP — it does not
+       answer "what is the probability that at least one risk exceeds x?".
+       It is useful as a stable risk-profile summary for large homogeneous
+       portfolios, but callers who need the true OEP should set
+       ``independence_assumption=True``.
+
+    2. **True OEP under independence** (``independence_assumption=True``):
+       P(max > x) = 1 - product_i(P(Y_i <= x)).
+       Mathematically correct for independent risks. Uses log-sum for
+       numerical stability but may still saturate at 1.0 for large portfolios
+       (>=1000 risks) at low thresholds. Only use for portfolios of <1000
+       risks, or where you specifically need the portfolio maximum distribution.
 
     Parameters
     ----------
@@ -141,12 +152,30 @@ def oep_curve(
     independence_assumption:
         If True, compute the true OEP under independence:
         P(max > x) = 1 - prod(P(Y_i <= x)).
-        If False (default), use mean exceedance probability.
+        If False (default), returns mean per-risk exceedance probability —
+        see note above on the distinction.
 
     Returns
     -------
     ExceedanceCurve object with .as_dataframe() method.
+
+    Warns
+    -----
+    UserWarning
+        When ``independence_assumption=False``, a warning is emitted to make
+        clear that the result is mean exceedance, not the portfolio OEP.
     """
+    if not independence_assumption:
+        warnings.warn(
+            "oep_curve() with independence_assumption=False returns the mean "
+            "per-risk exceedance probability, NOT the portfolio OEP "
+            "(P(max loss > x)). For the true OEP under independence, set "
+            "independence_assumption=True. The mean exceedance result is "
+            "still useful as a portfolio risk profile summary.",
+            UserWarning,
+            stacklevel=2,
+        )
+
     preds = model.predict(X)
     quantiles = model.spec.quantiles
     col_names = model.spec.column_names
@@ -173,7 +202,7 @@ def oep_curve(
             log_cdf_sum += np.log(cdf)
         probs = (1.0 - np.exp(log_cdf_sum)).tolist()
     else:
-        # Mean exceedance
+        # Mean per-risk exceedance probability (not portfolio OEP)
         exceedance = np.zeros(len(x_arr))
         for i in range(n_risks):
             row = pred_matrix[i]

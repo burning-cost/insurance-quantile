@@ -355,3 +355,70 @@ class TestCalibrationReport:
         individual = list(report["pinball_loss"].values())
         expected_mean = np.mean(individual)
         assert abs(report["mean_pinball_loss"] - expected_mean) < 1e-10
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for P1-3: predict_tvar dead code removal
+# ---------------------------------------------------------------------------
+
+
+class TestRegressionP1PredictTVarDeadCode:
+    """
+    Regression tests for P1-3: predict_tvar previously contained a dead-code
+    else-branch that instantiated a CatBoostRegressor but never fitted it,
+    then fell through to the same logic as the if-branch. The n_grid parameter
+    had no effect. Both are removed.
+    """
+
+    def test_predict_tvar_no_n_grid_param(self):
+        """predict_tvar must not accept an n_grid parameter (dead code removed)."""
+        import inspect
+
+        from insurance_quantile import QuantileGBM
+
+        sig = inspect.signature(QuantileGBM.predict_tvar)
+        assert "n_grid" not in sig.parameters, (
+            "n_grid parameter should be removed — it was dead code that had no effect"
+        )
+
+    def test_predict_tvar_works_with_few_above_alpha(self, exponential_data):
+        """
+        With only 1 quantile level above alpha, the old code silently used it
+        (after wasting time constructing an unfitted CatBoostRegressor).
+        The new code raises an informative ValueError when there are no levels
+        above alpha, or returns a result when there is at least one.
+        """
+        from insurance_quantile import QuantileGBM
+
+        X, y = exponential_data
+        # Model with just q_0.95 above alpha=0.9
+        model = QuantileGBM(quantiles=[0.5, 0.75, 0.9, 0.95], iterations=100)
+        model.fit(X, y)
+        # Should work — 1 quantile level above 0.9 is enough (returns mean = that level)
+        result = model.predict_tvar(X.head(10), alpha=0.9)
+        assert len(result) == 10
+
+    def test_predict_tvar_raises_no_levels_above_alpha(self, exponential_data):
+        """
+        When alpha equals or exceeds all fitted quantiles, ValueError is raised.
+        The old code would raise the same error but only after constructing a
+        dead CatBoostRegressor — confirmed the raise path is still intact.
+        """
+        from insurance_quantile import QuantileGBM
+
+        X, y = exponential_data
+        model = QuantileGBM(quantiles=[0.5, 0.75], iterations=100)
+        model.fit(X, y)
+        with pytest.raises(ValueError, match="no quantile levels above alpha"):
+            model.predict_tvar(X.head(10), alpha=0.9)
+
+    def test_predict_tvar_result_geq_var(self, fitted_quantile_model, exponential_data):
+        """TVaR from predict_tvar should be >= the corresponding VaR column."""
+        X, _ = exponential_data
+        tvar = fitted_quantile_model.predict_tvar(X.head(200), alpha=0.9)
+        q90 = fitted_quantile_model.predict(X.head(200))["q_0.95"].to_numpy()
+        # TVaR at 0.9 averages all quantiles above 0.9 (0.95, 0.99) — must exceed q_0.9
+        q90_pred = fitted_quantile_model.predict(X.head(200))["q_0.9"].to_numpy()
+        assert (tvar.to_numpy() >= q90_pred - 1e-6).all(), (
+            "predict_tvar should produce values >= the 0.9 quantile"
+        )

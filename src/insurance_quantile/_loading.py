@@ -90,9 +90,16 @@ def large_loss_loading(
 
     # Try passing X as-is first; if that fails (e.g. raw CatBoost/sklearn
     # models that do not accept Polars DataFrames), fall back to numpy.
+    # IMPORTANT: only catch exceptions from the predict() call itself,
+    # not from our own validation (e.g. multi-column DataFrame check).
     X_np = X.to_numpy()
     try:
         mean_preds = model_mean.predict(X)
+    except (TypeError, AttributeError):
+        # Model does not accept Polars input — retry with numpy array
+        mean_preds = model_mean.predict(X_np)
+        mean_vals = np.asarray(mean_preds, dtype=np.float64)
+    else:
         if isinstance(mean_preds, pl.DataFrame):
             if mean_preds.width != 1:
                 raise ValueError(
@@ -105,10 +112,6 @@ def large_loss_loading(
         else:
             # numpy array or other array-like
             mean_vals = np.asarray(mean_preds, dtype=np.float64)
-    except (TypeError, ValueError, AttributeError):
-        # Model does not accept Polars input — retry with numpy array
-        mean_preds = model_mean.predict(X_np)
-        mean_vals = np.asarray(mean_preds, dtype=np.float64)
 
     loading = tvar_vals - mean_vals
     return pl.Series("large_loss_loading", loading)

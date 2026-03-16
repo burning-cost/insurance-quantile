@@ -31,7 +31,7 @@ class TestPerRiskTVaR:
     def test_tvar_method_label(self, fitted_quantile_model, exponential_data):
         X, _ = exponential_data
         result = per_risk_tvar(fitted_quantile_model, X, alpha=0.9)
-        assert result.method == "grid_mean"
+        assert result.method == "trapezoidal"
 
     def test_tvar_exceeds_var(self, fitted_quantile_model, exponential_data):
         """TVaR should be >= VaR for all risks (TVaR is always in the tail)."""

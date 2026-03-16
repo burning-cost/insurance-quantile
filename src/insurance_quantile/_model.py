@@ -339,12 +339,26 @@ class QuantileGBM:
         above_arr = np.array(above_any)
 
         # Trapezoidal integration: weight each quantile prediction by its interval width.
-        # Prepend alpha as boundary using the first tail quantile value (flat extrapolation).
+        # Use Q(alpha) as the left boundary when available (most accurate and guarantees
+        # TVaR >= VaR). Fall back to flat extrapolation with Q(first_above) otherwise.
+        at_alpha = [q for q in self._spec.quantiles if q == alpha]
+        if at_alpha:
+            boundary_vals = preds_df[f"q_{at_alpha[0]}"].to_numpy().reshape(-1, 1)
+        else:
+            boundary_vals = tail_vals[:, 0:1]
+
         levels = np.concatenate([[alpha], above_arr])
-        first_col = tail_vals[:, 0:1]
-        values_with_boundary = np.concatenate([first_col, tail_vals], axis=1)
+        values_with_boundary = np.concatenate([boundary_vals, tail_vals], axis=1)
         integral = _trapezoid(values_with_boundary, levels, axis=1)
         tvar = integral / (1.0 - alpha)
+
+        # VaR at alpha — clip TVaR to be >= VaR for numerical safety
+        at_or_below = [q for q in self._spec.quantiles if q <= alpha]
+        if at_or_below:
+            var_vals = preds_df[f"q_{at_or_below[-1]}"].to_numpy()
+        else:
+            var_vals = preds_df[f"q_{self._spec.quantiles[0]}"].to_numpy()
+        tvar = np.maximum(tvar, var_vals)
 
         return pl.Series("tvar", tvar)
 

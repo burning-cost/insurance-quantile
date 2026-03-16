@@ -134,7 +134,7 @@ gbm_preds = model.predict(X_val)
 
 # TVaR at 90th percentile
 tvar_gbm = per_risk_tvar(model, X_val, alpha=0.90)
-tvar_val_np = tvar_gbm.to_numpy()
+tvar_val_np = tvar_gbm.values.to_numpy()
 
 # DGP true TVaR (oracle)
 tvar_true = lognormal_tvar(log_mu_val, log_sigma_val, 0.90)
@@ -204,9 +204,8 @@ def lognormal_limited_ev(log_mu, log_sigma, L):
 dgp_ilf_base = lognormal_limited_ev(log_mu_val, log_sigma_val, base_limit)
 bl_ilf_base = lognormal_limited_ev(log_mu_ols_val, log_sigma_ols_global, base_limit)
 
-# GBM ILF uses the library function
-gbm_ilf_base = ilf(model, X_val, limit1=base_limit, limit2=base_limit)
-gbm_ilf_base_np = gbm_ilf_base.to_numpy()
+# GBM ILF: ilf() returns E[min(Y,higher_limit)] / E[min(Y,basic_limit)] directly.
+# The denominator normalisation is built into the function (basic_limit < higher_limit required).
 
 print(f"  {'Limit':>10}  {'ILF_DGP':>10}  {'ILF_Baseline':>14}  {'ILF_GBM':>10}  "
       f"{'Err Baseline':>14}  {'Err GBM':>10}")
@@ -216,7 +215,7 @@ for L in test_limits:
     dgp_ilf = float(np.mean(dgp_lev / dgp_ilf_base))
     bl_lev = lognormal_limited_ev(log_mu_ols_val, log_sigma_ols_global, L)
     bl_ilf = float(np.mean(bl_lev / bl_ilf_base))
-    gbm_ilf_L = ilf(model, X_val, limit1=base_limit, limit2=L)
+    gbm_ilf_L = ilf(model, X_val, basic_limit=base_limit, higher_limit=L)
     gbm_ilf_val = float(np.mean(gbm_ilf_L.to_numpy()))
     err_bl = bl_ilf - dgp_ilf
     err_gbm = gbm_ilf_val - dgp_ilf

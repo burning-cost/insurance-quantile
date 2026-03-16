@@ -172,20 +172,49 @@ cqr.fit(y_cal2, preds_cal["q_0.05"], preds_cal["q_0.95"])
 
 ## Performance
 
-Benchmarked against **parametric Gamma quantiles** (Gamma GLM + analytic quantile formula) on synthetic severity data with a heteroskedastic lognormal DGP where tail weight varies with a covariate. Full notebook: `notebooks/benchmark.py`.
+Benchmarked against **parametric lognormal quantiles** (OLS on log(Y) with global sigma) on synthetic severity data — 5,000 claims from a heteroskedastic lognormal DGP where tail weight (`log_sigma`) varies by vehicle group from 0.46 to 0.64. 4,000 train / 1,000 test split. Numbers from the post-P0-fix benchmark run:
 
-| Metric | Gamma GLM quantiles | QuantileGBM (insurance-quantile) |
-|--------|--------------------|---------------------------------|
-| Quantile calibration (90th / 95th / 99th) | systematically biased | near stated level |
-| TVaR accuracy vs DGP | underestimates for high-risk | near DGP truth |
-| Heteroskedastic coverage | poor (global shape parameter) | adapts per segment |
-| Pinball loss (99th percentile) | higher | lower |
+**TABLE 1: Quantile calibration (coverage) and pinball loss**
 
-The key failure mode of the Gamma baseline is the global shape parameter: it cannot represent different tail weights for different risk segments. The QuantileGBM learns the conditional quantile function directly via CatBoost's MultiQuantile pinball loss — if a high-sum-insured segment genuinely has a heavier tail, the model learns that from the data.
+| Quantile | Coverage — Lognormal | Coverage — QuantileGBM | Pinball — Lognormal | Pinball — QuantileGBM |
+|----------|---------------------|----------------------|--------------------|-----------------------|
+| Q90 | 0.8970 | 0.8590 | 185.8 | 197.9 |
+| Q95 | 0.9470 | 0.9150 | 122.3 | 136.7 |
+| Q99 | 0.9890 | 0.9560 | 38.4 | 54.8 |
 
-**When to use:** Large loss loading in ground-up pricing where severity is genuinely heteroskedastic (tail weight varies across risk segments). Reinsurance pricing where TVaR in a layer is the deliverable. Any application where the 95th or 99th percentile is the pricing input, not just the mean.
+**TABLE 2: TVaR accuracy vs DGP analytical truth (TVaR_90)**
 
-**When NOT to use:** When the portfolio has only a few hundred large claims in the training period — the tail quantiles are estimated from very few data points regardless of method, and the parametric Gamma's regularisation may actually help. Also when the actuarial deliverable requires a smooth, monotone ILF curve — quantile regression is not constrained to be monotone in the limit dimension without additional work.
+| Metric | Lognormal baseline | QuantileGBM |
+|--------|--------------------|-------------|
+| MAE vs DGP truth | 315.1 | 477.0 |
+| RMSE vs DGP truth | 370.9 | 733.9 |
+| Bias (mean over/under-estimate) | −70.9 | −39.8 |
+
+**TABLE 3: ILF accuracy vs DGP truth (base limit £5,000)**
+
+| Limit | ILF (DGP) | ILF (Lognormal) | ILF (QuantileGBM) | Error — Lognormal | Error — QuantileGBM |
+|-------|-----------|-----------------|-------------------|-------------------|---------------------|
+| £10,000 | 1.0070 | 1.0042 | 1.0029 | −0.0028 | −0.0041 |
+| £25,000 | 1.0074 | 1.0043 | 1.0026 | −0.0031 | −0.0049 |
+| £50,000 | 1.0074 | 1.0043 | 1.0031 | −0.0031 | −0.0043 |
+| £100,000 | 1.0074 | 1.0043 | 1.0017 | −0.0031 | −0.0057 |
+
+**TABLE 4: Q95 coverage by vehicle group (heteroskedastic test)**
+
+| Group | True log_sigma | Coverage — Lognormal | Coverage — QuantileGBM |
+|-------|---------------|---------------------|----------------------|
+| 1 | 0.460 | 0.9878 | 0.9143 |
+| 2 | 0.520 | 0.9421 | 0.8843 |
+| 3 | 0.580 | 0.9434 | 0.9283 |
+| 4 | 0.640 | 0.9153 | 0.9315 |
+
+**Honest interpretation:** At this sample size (5,000 claims, 1,000 test), the lognormal baseline outperforms QuantileGBM on pinball loss, TVaR MAE/RMSE, and ILF accuracy for all limits tested. The GBM has lower TVaR bias (−39.8 vs −70.9), which matters when you care about directional accuracy rather than absolute error. The heteroskedastic Q95 coverage test shows QuantileGBM adapts better for group 4 (heaviest tail, 0.9315 vs 0.9153) but worse for groups 1–2.
+
+The OLS lognormal benefits from the fact that the DGP is lognormal — a correctly specified parametric model will win when the distribution family is right. The GBM advantage appears at larger sample sizes and when the true distribution diverges from lognormal: e.g. bimodal severity (small repair + large BI), threshold effects by region, or mixing across lines. Run the full Databricks notebook for larger-scale validation.
+
+**When to use:** Where severity genuinely departs from the parametric family you'd otherwise assume, and you have more than ~10,000 non-zero claims. For TVaR and large loss loading where the tail shape varies across risk segments in a way that a single-parameter family cannot capture.
+
+**When NOT to use:** When the portfolio has fewer than ~5,000 large claims — parametric regularisation wins at small n. When the actuarial deliverable requires a smooth, monotone ILF curve — quantile regression is not constrained to be monotone in the limit dimension without additional work.
 
 
 

@@ -20,7 +20,7 @@ None of this comes out of a Tweedie model. You need the full conditional distrib
 
 CatBoost's `MultiQuantile` loss trains a single model for all quantile levels simultaneously — shared feature representations, one training pass. It outperforms separate models and is faster to fit than quantile random forests on structured tabular data. The downside is quantile crossing at prediction time (CatBoost issue #2317), which we fix with per-row isotonic regression.
 
-For heavy-tailed lines (motor BI, liability), expectile mode is available. Expectile regression has a property quantile regression lacks: it is both **coherent** (satisfies subadditivity) and **elicitable** (has a proper scoring rule). This makes it backtestable and suitable for ORSA and Solvency II reporting.
+For heavy-tailed lines (motor BI, liability), expectile mode is available. Expectile regression is both **elicitable** (has a proper scoring rule, making it backtestable) and satisfies **subadditivity under elliptical distributions**. For general heavy-tailed non-elliptical distributions, subadditivity of expectiles is not guaranteed — Expected Shortfall (TVaR) remains the standard coherent risk measure for capital purposes. Expectile mode is appropriate when elicitability and backtest-friendliness are the priority, not when Solvency II coherence is the requirement.
 
 ## Installation
 
@@ -80,7 +80,10 @@ preds = model.predict(X_val)
 # TVaR per risk
 tvar = per_risk_tvar(model, X_val, alpha=0.95)
 
-# Large loss loading: requires a fitted mean model for comparison
+# Large loss loading: requires a fitted mean model for comparison.
+# large_loss_loading handles Polars DataFrames and numpy arrays transparently —
+# raw CatBoostRegressor or sklearn models that do not accept Polars are converted
+# to numpy automatically.
 from catboost import CatBoostRegressor
 tweedie_model = CatBoostRegressor(loss_function="Tweedie:variance_power=1.5",
                                   iterations=200, verbose=0)
@@ -121,7 +124,7 @@ model = QuantileGBM(
 model.fit(X_train, y_train)
 ```
 
-Expectiles are not the same as quantiles. The `e_0.9` expectile is generally different from `Q(0.9)`. Use expectile mode when you need a coherent, backtestable tail risk measure — not when you need P(Y > x) directly.
+Expectiles are not the same as quantiles. The `e_0.9` expectile is generally different from `Q(0.9)`. Use expectile mode when you need an elicitable, backtestable tail risk measure — not when you need P(Y > x) directly. For capital purposes requiring coherence (e.g. Solvency II), use TVaR (Expected Shortfall) instead.
 
 ## Zero-inflated data
 
@@ -164,7 +167,7 @@ cqr.fit(y_cal2, preds_cal["q_0.05"], preds_cal["q_0.95"])
 
 **Exposure as sample_weight**: exposure is passed to CatBoost as `sample_weight`, not as an offset. This weights each row's loss contribution, which is appropriate when the target is aggregate cost. If your target is severity (cost per claim), do not pass exposure here.
 
-**TVaR approximation**: we estimate TVaR by taking the mean of quantile predictions at levels above alpha. Accuracy improves with the number of high quantile levels in the model — include 0.95, 0.99 at minimum for TVaR at alpha=0.9.
+**TVaR approximation**: we estimate TVaR using trapezoidal integration over the quantile function at the stored levels above alpha. This correctly weights each quantile estimate by its interval width, unlike a naive mean. Accuracy improves with the number of high quantile levels in the model — include 0.95, 0.99 at minimum for TVaR at alpha=0.9.
 
 **ILF integration**: `E[min(Y, L)] = integral_0^L P(Y > x) dx`, integrated numerically using the trapezoidal rule over the interpolated survival function from quantile predictions. 200 integration points is sufficient for smooth severity distributions.
 
@@ -251,15 +254,6 @@ This package consolidates two previously separate libraries:
 - polars >= 1.0
 - scikit-learn >= 1.3
 - numpy >= 1.24
-
-
-## Related Libraries
-
-| Library | What it does |
-|---------|-------------|
-| [insurance-severity](https://github.com/burning-cost/insurance-severity) | Composite Pareto-Gamma severity models — parametric alternative when closed-form ILFs and tail quantities are required |
-| [insurance-conformal](https://github.com/burning-cost/insurance-conformal) | Conformal prediction intervals — wrap quantile GBM output with distribution-free coverage guarantees |
-| [insurance-distributional](https://github.com/burning-cost/insurance-distributional) | Parametric severity distributions — alternative approach when you need the full distributional shape, not just quantile levels |
 
 ## Licence
 

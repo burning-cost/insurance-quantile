@@ -43,7 +43,7 @@ from ._types import ExceedanceCurve, QuantileSpec, TailModel, TVaRResult
 # EQRN re-exports (key classes only; full API via insurance_quantile.eqrn)
 from .eqrn import EQRNModel, EQRNDiagnostics, GPDNet, IntermediateQuantileEstimator
 
-__version__ = "0.2.0"
+__version__ = "0.2.3"
 
 __all__ = [
     # Core GBM model

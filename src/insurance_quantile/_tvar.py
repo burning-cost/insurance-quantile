@@ -11,18 +11,27 @@ TVaR(portfolio) <= sum(TVaR(individual risks)). This is the key property
 that makes it suitable for capital allocation and aggregate excess of loss
 pricing, unlike VaR which is not subadditive.
 
-The approximation used here integrates the quantile function numerically:
+The approximation used here integrates the quantile function numerically
+using the trapezoidal rule:
 
     TVaR_alpha ≈ (1 / (1 - alpha)) * integral_{alpha}^{1} Q(u) du
-               ≈ mean(Q(u) for u in grid above alpha)
+               ≈ trapz(Q(u), u) / (1 - alpha)
+                 where u is the grid of quantile levels above alpha
 
-where Q(u) is the predicted quantile at level u.
+This weighting by interval width is correct. A naive mean of Q(u) at the
+available quantile levels is biased when those levels are unevenly spaced —
+for example, with levels [0.95, 0.99] at alpha=0.9, the interval (0.9, 0.95)
+has width 5/10, (0.95, 0.99) has width 4/10, and (0.99, 1.0) has width 1/10.
+The trapezoidal rule weights them appropriately; a simple mean does not.
 """
 
 from __future__ import annotations
 
 import numpy as np
 import polars as pl
+
+# numpy<2.0 compat: trapezoid was added in 2.0, trapz deprecated in 2.0
+_trapezoid = getattr(np, "trapezoid", None) or np.trapz
 
 from ._types import TVaRResult
 
@@ -42,10 +51,16 @@ def per_risk_tvar(
 
     TVaR_alpha(i) = E[Y_i | Y_i > VaR_alpha(Y_i)]
 
-    This is approximated by taking the mean of the model's quantile predictions
-    at levels strictly above alpha. The accuracy improves with the number of
-    quantile levels above alpha that were fitted in the model — for best results,
-    include levels 0.9, 0.95, 0.975, 0.99, 0.995 when fitting.
+    This is approximated using trapezoidal integration over the model's
+    quantile predictions at levels strictly above alpha:
+
+        TVaR_alpha ≈ trapz(Q(u), u) / (1 - alpha)
+
+    where u is the array of stored quantile levels above alpha. This
+    correctly weights each quantile estimate by its interval width. Accuracy
+    improves with the number of quantile levels above alpha that were fitted
+    in the model — for best results, include levels 0.9, 0.95, 0.975, 0.99,
+    0.995 when fitting.
 
     Parameters
     ----------
@@ -83,7 +98,25 @@ def per_risk_tvar(
     preds = model.predict(X)
     tail_cols = [f"q_{q}" for q in above]
     tail_matrix = np.stack([preds[c].to_numpy() for c in tail_cols], axis=1)
-    tvar_vals = tail_matrix.mean(axis=1)
+    above_arr = np.array(above)
+
+    # Trapezoidal integration over the quantile levels above alpha.
+    # We add alpha as a left endpoint (using the first tail quantile value
+    # as a linear extrapolation to alpha, which is a reasonable approximation).
+    # The integral is: integral_{alpha}^{1} Q(u) du / (1 - alpha)
+    #
+    # We include alpha as a boundary point by prepending it with the value
+    # of the lowest tail quantile (conservative: flat extrapolation).
+    # This avoids discontinuity artefacts when there is a large gap between
+    # alpha and the first model quantile above alpha.
+    levels = np.concatenate([[alpha], above_arr])
+    # shape: (n_risks, n_levels)
+    first_col = tail_matrix[:, 0:1]  # use the lowest tail quantile at the alpha boundary
+    values_with_boundary = np.concatenate([first_col, tail_matrix], axis=1)
+
+    # trapz integrates along axis=1 (quantile levels)
+    integral = _trapezoid(values_with_boundary, levels, axis=1)  # shape: (n_risks,)
+    tvar_vals = integral / (1.0 - alpha)
 
     # VaR at alpha: use closest quantile at or below alpha
     at_or_below = [q for q in model.spec.quantiles if q <= alpha]
@@ -99,7 +132,7 @@ def per_risk_tvar(
         alpha=alpha,
         values=pl.Series("tvar", tvar_vals),
         var_values=pl.Series("var", var_vals),
-        method="grid_mean",
+        method="trapezoidal",
     )
 
 

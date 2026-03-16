@@ -39,7 +39,7 @@ __all__ = [
 
 
 def large_loss_loading(
-    model_mean: "Any",  # noqa: F821 — Tweedie/GBM model with .predict(X) -> pl.Series
+    model_mean: "Any",  # noqa: F821 — Tweedie/GBM model with .predict(X) -> array-like
     model_quantile: "QuantileGBM",  # noqa: F821
     X: pl.DataFrame,
     alpha: float = 0.95,
@@ -56,13 +56,15 @@ def large_loss_loading(
     Parameters
     ----------
     model_mean:
-        Any model with a predict(X) method that returns a Polars Series
-        or DataFrame with a single column of mean loss estimates.
-        Typically a Tweedie CatBoost model.
+        Any model with a predict method that returns mean loss estimates.
+        Accepts models that take Polars DataFrames, numpy arrays, or both.
+        For raw CatBoostRegressor or sklearn estimators that do not accept
+        Polars DataFrames, the feature matrix is automatically converted to
+        a numpy array before prediction.
     model_quantile:
         A fitted QuantileGBM, used to derive TVaR_alpha per risk.
     X:
-        Feature matrix.
+        Feature matrix as a Polars DataFrame.
     alpha:
         TVaR confidence level. 0.95 is standard for personal lines.
         Use 0.99 for commercial lines where aggregate stop-loss treaties
@@ -86,18 +88,26 @@ def large_loss_loading(
     tvar_result = per_risk_tvar(model_quantile, X, alpha)
     tvar_vals = tvar_result.values.to_numpy()
 
-    mean_preds = model_mean.predict(X)
-    if isinstance(mean_preds, pl.DataFrame):
-        if mean_preds.width != 1:
-            raise ValueError(
-                "model_mean.predict(X) returned a multi-column DataFrame. "
-                "Expected a single-column DataFrame or Series."
-            )
-        mean_vals = mean_preds.to_series().to_numpy().astype(np.float64)
-    elif isinstance(mean_preds, pl.Series):
-        mean_vals = mean_preds.to_numpy().astype(np.float64)
-    else:
-        # numpy array or other array-like
+    # Try passing X as-is first; if that fails (e.g. raw CatBoost/sklearn
+    # models that do not accept Polars DataFrames), fall back to numpy.
+    X_np = X.to_numpy()
+    try:
+        mean_preds = model_mean.predict(X)
+        if isinstance(mean_preds, pl.DataFrame):
+            if mean_preds.width != 1:
+                raise ValueError(
+                    "model_mean.predict(X) returned a multi-column DataFrame. "
+                    "Expected a single-column DataFrame or Series."
+                )
+            mean_vals = mean_preds.to_series().to_numpy().astype(np.float64)
+        elif isinstance(mean_preds, pl.Series):
+            mean_vals = mean_preds.to_numpy().astype(np.float64)
+        else:
+            # numpy array or other array-like
+            mean_vals = np.asarray(mean_preds, dtype=np.float64)
+    except (TypeError, ValueError, AttributeError):
+        # Model does not accept Polars input — retry with numpy array
+        mean_preds = model_mean.predict(X_np)
         mean_vals = np.asarray(mean_preds, dtype=np.float64)
 
     loading = tvar_vals - mean_vals

@@ -7,7 +7,7 @@ Design rationale:
   feature representations are shared across all probability levels.
 - Expectile mode fits separate CatBoost models per alpha. CatBoost has no MultiExpectile
   loss (as of 1.2.x), so we trade off efficiency for the expectile's theoretical advantages:
-  it is both coherent and elicitable, unlike quantiles which are elicitable but not coherent.
+  it is both elicitable and satisfies subadditivity under elliptical distributions.
 - Isotonic regression post-processing fixes quantile crossing (CatBoost issue #2317).
   The underlying MultiQuantile loss does not guarantee monotonicity across quantile levels
   at the prediction stage. Isotonic regression is O(n * k) and negligible in practice.
@@ -30,6 +30,9 @@ from sklearn.isotonic import IsotonicRegression
 from ._types import QuantileSpec, TailModel
 
 __all__ = ["QuantileGBM"]
+
+# numpy<2.0 compat: trapezoid was added in 2.0, trapz deprecated in 2.0
+_trapezoid = getattr(np, "trapezoid", None) or np.trapz
 
 
 def _to_numpy(df) -> np.ndarray:
@@ -89,9 +92,9 @@ class QuantileGBM:
     use_expectile:
         If True, fit expectile regression instead of quantile regression.
         Expectile regression minimises an asymmetric squared loss — unlike
-        quantiles, expectiles are coherent risk measures. They are better
-        suited to heavy-tailed lines (motor BI, liability) where the tail
-        shape matters. Default is False.
+        quantiles, expectiles are elicitable and satisfy subadditivity under
+        elliptical distributions. They are better suited to heavy-tailed lines
+        (motor BI, liability) where the tail shape matters. Default is False.
     fix_crossing:
         Apply isotonic regression post-processing to prevent quantile crossing
         at prediction time. Strongly recommended; defaults to True. Crossing
@@ -293,17 +296,20 @@ class QuantileGBM:
 
         TVaR_alpha = E[Y | Y > VaR_alpha(Y)].
 
-        Uses the quantile levels already stored in this model that lie above
-        alpha. Requires at least 3 such levels for a reasonable approximation;
-        caller should fit with quantiles=[0.5, 0.75, 0.9, 0.95, 0.99] or similar.
+        Uses trapezoidal integration over the stored quantile levels above
+        alpha. For best accuracy, include several levels above your alpha
+        (e.g. 0.9, 0.95, 0.99 for TVaR at alpha=0.9).
+
+        The module-level function ``per_risk_tvar`` is the recommended
+        interface — it is equivalent to this method and is exported at the
+        package level.
 
         Parameters
         ----------
         X:
             Feature matrix.
         alpha:
-            Probability threshold, e.g. 0.95 for TVaR_95. Must be below the
-            highest quantile level the model was fitted with.
+            Probability threshold, e.g. 0.95 for TVaR_95.
 
         Returns
         -------
@@ -319,21 +325,27 @@ class QuantileGBM:
         if not (0.0 < alpha < 1.0):
             raise ValueError(f"alpha must be in (0, 1), got {alpha}")
 
-        # Use stored quantile levels above alpha
-        above_alpha = [q for q in self._spec.quantiles if q > alpha]
-
-        if not above_alpha:
+        above_any = [q for q in self._spec.quantiles if q > alpha]
+        if not above_any:
             raise ValueError(
                 f"Model has no quantile levels above alpha={alpha}. "
                 "Add higher quantiles (e.g. 0.99) or call predict_tvar "
                 "with a lower alpha."
             )
 
-        col_names = [f"q_{q}" for q in above_alpha]
+        col_names = [f"q_{q}" for q in above_any]
         preds_df = self.predict(X)
         tail_vals = np.stack([preds_df[c].to_numpy() for c in col_names], axis=1)
+        above_arr = np.array(above_any)
 
-        tvar = tail_vals.mean(axis=1)
+        # Trapezoidal integration: weight each quantile prediction by its interval width.
+        # Prepend alpha as boundary using the first tail quantile value (flat extrapolation).
+        levels = np.concatenate([[alpha], above_arr])
+        first_col = tail_vals[:, 0:1]
+        values_with_boundary = np.concatenate([first_col, tail_vals], axis=1)
+        integral = _trapezoid(values_with_boundary, levels, axis=1)
+        tvar = integral / (1.0 - alpha)
+
         return pl.Series("tvar", tvar)
 
     # ------------------------------------------------------------------

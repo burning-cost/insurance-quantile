@@ -14,23 +14,21 @@ Actuarial functions:
 - exceedance_curve / oep_curve: portfolio exceedance probability curves
 - coverage_check / pinball_loss: calibration diagnostics
 
+Two-part quantile premium:
+- TwoPartQuantilePremium: frequency-severity QPP decomposition at explicit
+  aggregate confidence level tau. Solves the zero-inflation problem for
+  UK motor OD, property and liability pricing.
+- TwoPartResult: per-policy premiums, loadings, and diagnostic fields.
+
 EQRN subpackage (insurance_quantile.eqrn):
 - EQRNModel: extreme quantile regression neural network (Pasche & Engelke 2024)
 - EQRNDiagnostics: GPD QQ, calibration, threshold stability plots
 - GPDNet: feedforward network for covariate-dependent GPD parameters
 - IntermediateQuantileEstimator: K-fold OOF intermediate quantile estimation
 
-v0.3.0 adds TwoPartQuantilePremium — frequency × severity quantile premium
-with formal variance-based safety loading (Fissler & Ziegel, NAAJ 2025)::
-
-    from insurance_quantile import TwoPartQuantilePremium
-
-    model = TwoPartQuantilePremium(alpha=0.95, safety_loading_lambda=0.5)
-    model.fit(X_train, y_train, freq_model=glm_freq)
-    result = model.predict(X_test)
-
-    result.quantile_premium   # freq * Q_0.95(sev) + loading
-    result.safety_loading     # explicit variance-based loading per risk
+The EQRN classes are imported lazily: they are only loaded when accessed.
+This means `import insurance_quantile` does NOT require torch to be installed.
+Torch is only required when you actually use EQRNModel or related classes.
 
 Integration: QuantileGBM output can feed directly into insurance-conformal
 for Conformalized Quantile Regression (CQR), providing distribution-free
@@ -50,25 +48,20 @@ from ._exceedance import exceedance_curve, oep_curve
 from ._loading import ilf, large_loss_loading
 from ._model import QuantileGBM
 from ._tvar import per_risk_tvar, portfolio_tvar
-from ._two_part import TwoPartQuantilePremium, TwoPartPremiumResult
-from ._types import ExceedanceCurve, QuantileSpec, TailModel, TVaRResult
+from ._two_part import TwoPartQuantilePremium
+from ._types import ExceedanceCurve, QuantileSpec, TailModel, TwoPartResult, TVaRResult
 
-# EQRN re-exports (key classes only; full API via insurance_quantile.eqrn)
-from .eqrn import EQRNModel, EQRNDiagnostics, GPDNet, IntermediateQuantileEstimator
-
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 __all__ = [
     # Core GBM model
     "QuantileGBM",
-    # Two-part quantile premium (v0.3.0)
-    "TwoPartQuantilePremium",
-    "TwoPartPremiumResult",
     # Types
     "QuantileSpec",
     "TailModel",
     "TVaRResult",
     "ExceedanceCurve",
+    "TwoPartResult",
     # TVaR
     "per_risk_tvar",
     "portfolio_tvar",
@@ -82,7 +75,9 @@ __all__ = [
     "coverage_check",
     "pinball_loss",
     "quantile_calibration_plot",
-    # EQRN (extreme quantile neural net)
+    # Two-part quantile premium
+    "TwoPartQuantilePremium",
+    # EQRN (extreme quantile neural net) — lazy imports, requires torch
     "EQRNModel",
     "EQRNDiagnostics",
     "GPDNet",
@@ -90,3 +85,28 @@ __all__ = [
     # Version
     "__version__",
 ]
+
+
+def __getattr__(name: str):
+    """
+    Lazy import for EQRN classes that require torch.
+
+    Torch is a large optional dependency (~2GB). We defer the import until
+    the user actually accesses one of these classes, so that the rest of the
+    library can be used without torch installed.
+    """
+    _eqrn_names = {"EQRNModel", "EQRNDiagnostics", "GPDNet", "IntermediateQuantileEstimator"}
+    if name in _eqrn_names:
+        try:
+            from . import eqrn as _eqrn_mod
+        except ImportError as e:
+            raise ImportError(
+                f"'{name}' requires torch to be installed. "
+                "Install it with: pip install torch\n"
+                f"Original error: {e}"
+            ) from e
+        obj = getattr(_eqrn_mod, name)
+        # Cache on the module so subsequent accesses don't go through __getattr__
+        globals()[name] = obj
+        return obj
+    raise AttributeError(f"module 'insurance_quantile' has no attribute '{name}'")

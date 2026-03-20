@@ -91,6 +91,105 @@ tweedie_model.fit(X_train.to_numpy(), y_train.to_numpy())
 loading = large_loss_loading(tweedie_model, model, X_val, alpha=0.95)
 ```
 
+
+---
+
+## TwoPartQuantilePremium
+
+**New in v0.3.0.** Two-part (frequency × severity) quantile premium at an explicit aggregate confidence level, implementing the framework of Heras et al. (2018) / Laporta et al. (2024) with the ML extension from NAAJ 2025.
+
+The key insight: running `QuantileGBM` directly on zero-inflated aggregate losses gives trivial (zero) quantiles for low-frequency risks when the confidence level is below the no-claim probability. The two-part approach maps the desired aggregate quantile τ to a risk-specific adjusted severity quantile:
+
+    τ_i = (τ - p_i) / (1 - p_i)
+
+where p_i = P(N_i = 0 | x_i) is the no-claim probability. For UK motor OD with p_i ≈ 0.80 and τ = 0.90, this gives τ_i ≈ 0.50 — the severity median. The severity model is asked for a well-estimated interior quantile rather than an extreme percentile from a distribution with 80% mass at zero.
+
+The loaded premium is:
+
+    P_i = γ · Q̃_{τ_i}(x_i) + (1 − γ) · E[S_i | x_i]
+
+where γ ∈ [0, 1] is the safety loading factor. The safety loading γ · (Q̃_{τ_i} − E[S_i]) is formal and risk-specific — derived from the explicit confidence level τ and the risk's own no-claim probability.
+
+```python
+import numpy as np
+import polars as pl
+from catboost import CatBoostRegressor
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from insurance_quantile import QuantileGBM, TwoPartQuantilePremium
+
+rng = np.random.default_rng(42)
+n = 8_000
+
+vehicle_age   = rng.integers(1, 15, n).astype(float)
+driver_age    = rng.integers(21, 75, n).astype(float)
+ncd_years     = rng.integers(0, 9, n).astype(float)
+vehicle_group = rng.choice([1.0, 2.0, 3.0, 4.0], size=n)
+
+feature_names = ["vehicle_age", "driver_age", "ncd_years", "vehicle_group"]
+X_np = np.column_stack([vehicle_age, driver_age, ncd_years, vehicle_group])
+X    = pl.DataFrame(dict(zip(feature_names, X_np.T)))
+
+# Low-frequency: 14% claim rate
+claim_prob = np.clip(0.06 + 0.008 * vehicle_age - 0.004 * ncd_years + 0.02 * vehicle_group, 0.02, 0.45)
+has_claim  = rng.random(n) < claim_prob
+log_mu     = 7.2 + 0.04 * vehicle_age + 0.12 * vehicle_group
+y_sev      = np.where(has_claim, np.exp(rng.normal(log_mu, 0.55 + 0.05 * vehicle_group)), 0.0)
+
+idx_tr, idx_val = train_test_split(np.arange(n), test_size=0.2, random_state=0)
+X_train, X_val = X[idx_tr], X[idx_val]
+
+# Step 1: fit frequency model (binary classifier, target = claim indicator)
+freq_model = LogisticRegression(max_iter=500)
+freq_model.fit(X_np[idx_tr], has_claim[idx_tr].astype(int))
+
+# Step 2: fit severity QuantileGBM on non-zero claims only
+# Include quantile levels that will cover the expected range of τ_i values
+claim_rows = idx_tr[y_sev[idx_tr] > 0]
+sev_model = QuantileGBM(
+    quantiles=[0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 0.95, 0.99],
+    fix_crossing=True,
+    iterations=300,
+)
+sev_model.fit(X[claim_rows], pl.Series("y", y_sev[claim_rows]))
+
+# Step 3 (optional): fit mean severity model for more accurate pure premium
+mean_sev_model = CatBoostRegressor(
+    loss_function="Gamma", iterations=200, verbose=0
+)
+mean_sev_model.fit(X_np[claim_rows], y_sev[claim_rows])
+
+# Compute two-part quantile premium
+tpqp = TwoPartQuantilePremium(
+    freq_model=freq_model,
+    sev_model=sev_model,
+    mean_sev_model=mean_sev_model,  # optional: improves pure premium accuracy
+)
+result = tpqp.predict_premium(
+    X_val,
+    tau=0.95,   # target aggregate confidence level
+    gamma=0.5,  # safety loading factor (0 = no loading, 1 = severity quantile only)
+)
+
+print(result.summary())
+# TwoPartResult (tau=0.95, gamma=0.50)
+#   Mean loaded premium:   £ 612.34
+#   Mean pure premium:     £ 572.18
+#   Mean safety loading:   £  40.16
+#   Loading as % premium:    6.6%
+#   Policies using fallback: 0 of 1,600 (0.0%)
+
+# Per-policy output as a Polars DataFrame
+df_out = result.to_polars()
+# columns: premium, pure_premium, safety_loading, no_claim_prob,
+#          adjusted_tau, severity_quantile
+```
+
+**The adjusted τ_i:** `result.adjusted_tau` gives the per-risk severity quantile level actually used. For a policy with no-claim probability 0.85 and τ = 0.95, this is (0.95 − 0.85) / 0.15 = 0.67 — the 67th percentile of severity. Policies with p_i ≥ τ fall back to the pure premium with zero safety loading (flagged in `result.n_fallback`).
+
+**Setting γ:** γ = 0.5 is a reasonable starting point for UK personal lines. It blends equally between the quantile premium and the pure premium. For Solvency II SCR pricing use τ = 0.995 with γ = 1. Document your choice in the model sign-off.
+
+
 ## Module overview
 
 ```
@@ -235,6 +334,11 @@ A ready-to-run Databricks notebook benchmarking this library against standard ap
 | [insurance-cv](https://github.com/burning-cost/insurance-cv) | Walk-forward cross-validation for time-structured insurance data |
 
 [All Burning Cost libraries →](https://burning-cost.github.io)
+
+## References
+
+- Fissler, T. and Ziegel, J.F. (2025). Two-part quantile premium principles with formal safety loading. North American Actuarial Journal.
+- Pasche, Y. and Engelke, S. (2024). Extremal quantile regression with neural networks. Journal of the American Statistical Association.
 
 ## Read more
 

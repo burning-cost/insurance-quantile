@@ -14,6 +14,12 @@ Actuarial functions:
 - exceedance_curve / oep_curve: portfolio exceedance probability curves
 - coverage_check / pinball_loss: calibration diagnostics
 
+Two-part quantile premium:
+- TwoPartQuantilePremium: frequency-severity QPP decomposition at explicit
+  aggregate confidence level tau. Solves the zero-inflation problem for
+  UK motor OD, property and liability pricing.
+- TwoPartResult: per-policy premiums, loadings, and diagnostic fields.
+
 EQRN subpackage (insurance_quantile.eqrn):
 - EQRNModel: extreme quantile regression neural network (Pasche & Engelke 2024)
 - EQRNDiagnostics: GPD QQ, calibration, threshold stability plots
@@ -38,12 +44,13 @@ from ._exceedance import exceedance_curve, oep_curve
 from ._loading import ilf, large_loss_loading
 from ._model import QuantileGBM
 from ._tvar import per_risk_tvar, portfolio_tvar
-from ._types import ExceedanceCurve, QuantileSpec, TailModel, TVaRResult
+from ._two_part import TwoPartQuantilePremium
+from ._types import ExceedanceCurve, QuantileSpec, TailModel, TwoPartResult, TVaRResult
 
 # EQRN re-exports (key classes only; full API via insurance_quantile.eqrn)
 from .eqrn import EQRNModel, EQRNDiagnostics, GPDNet, IntermediateQuantileEstimator
 
-__version__ = "0.2.3"
+__version__ = "0.3.1"
 
 __all__ = [
     # Core GBM model
@@ -53,6 +60,7 @@ __all__ = [
     "TailModel",
     "TVaRResult",
     "ExceedanceCurve",
+    "TwoPartResult",
     # TVaR
     "per_risk_tvar",
     "portfolio_tvar",
@@ -66,6 +74,8 @@ __all__ = [
     "coverage_check",
     "pinball_loss",
     "quantile_calibration_plot",
+    # Two-part quantile premium
+    "TwoPartQuantilePremium",
     # EQRN (extreme quantile neural net)
     "EQRNModel",
     "EQRNDiagnostics",

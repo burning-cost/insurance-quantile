@@ -18,6 +18,7 @@ __all__ = [
     "TailModel",
     "TVaRResult",
     "ExceedanceCurve",
+    "TwoPartResult",
 ]
 
 
@@ -153,3 +154,53 @@ class ExceedanceCurve:
                 "exceedance_prob": self.probabilities,
             }
         )
+
+
+@dataclass
+class TwoPartResult:
+    """
+    Results from TwoPartQuantilePremium.predict_premium().
+
+    Contains per-policy premiums, loadings, and diagnostic fields for
+    auditing the two-part quantile premium calculation.
+
+    Attributes
+    ----------
+    premium:
+        Per-risk loaded premium P_i as a Polars Series.
+        P_i = gamma * Q~_{tau_i}(x_i) + (1 - gamma) * E[S_i | x_i].
+    pure_premium:
+        Per-risk pure premium E[S_i | x_i] = (1 - p_i) * E[S~_i | x_i].
+        This is the expected aggregate loss without any safety loading.
+    safety_loading:
+        Additive loading: premium - pure_premium. Formal loading derived
+        from the explicit confidence level tau, not an ad hoc factor.
+        Zero for fallback policies (where p_i >= tau).
+    no_claim_prob:
+        Per-risk no-claim probability p_i = Pr(N_i = 0 | x_i) from the
+        frequency model.
+    adjusted_tau:
+        Per-risk adjusted severity quantile level tau_i = (tau - p_i) / (1 - p_i).
+        NaN for fallback policies where p_i >= tau (adjusted tau_i <= 0).
+    severity_quantile:
+        Per-risk severity quantile Q~_{tau_i}(x_i) from the QuantileGBM.
+        NaN for fallback policies.
+    n_fallback:
+        Number of policies where p_i >= tau — premium falls back to pure
+        premium with zero loading. Expected to be non-zero for low-frequency
+        risks when tau is low.
+    tau:
+        The target aggregate quantile level requested.
+    gamma:
+        The loading factor used.
+    """
+
+    premium: pl.Series
+    pure_premium: pl.Series
+    safety_loading: pl.Series
+    no_claim_prob: pl.Series
+    adjusted_tau: pl.Series
+    severity_quantile: pl.Series
+    n_fallback: int
+    tau: float
+    gamma: float

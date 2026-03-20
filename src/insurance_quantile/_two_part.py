@@ -215,6 +215,13 @@ class TwoPartQuantilePremium:
         X:
             Feature matrix as a Polars DataFrame. All columns must be numeric.
             Must have the same columns as used to fit freq_model and sev_model.
+            Must be a Polars DataFrame — numpy arrays and pandas DataFrames are
+            not accepted. Convert with pl.from_pandas(df) or pl.DataFrame(...).
+
+            freq_model receives X.to_numpy() internally (sklearn classifiers do not
+            require named columns). sev_model.predict() receives X directly as a
+            Polars DataFrame and must preserve column names for correct quantile
+            column lookup. This is why the Polars requirement is non-negotiable.
         tau:
             Target aggregate quantile level for S_i, e.g. 0.95. Must be in
             (0, 1). For Solvency II SCR pricing use tau = 0.995.
@@ -247,6 +254,15 @@ class TwoPartQuantilePremium:
         # ------------------------------------------------------------------
         # 1. Validate inputs
         # ------------------------------------------------------------------
+        if not isinstance(X, pl.DataFrame):
+            raise TypeError(
+                f"predict_premium() requires a Polars DataFrame, got {type(X).__name__}. "
+                "Convert with pl.from_pandas(df) for pandas DataFrames or "
+                "pl.DataFrame({'col': arr}) for numpy arrays. "
+                "The Polars requirement exists because sev_model.predict() returns a "
+                "Polars DataFrame with named quantile columns that must match the "
+                "column order used at training time."
+            )
         if not (0.0 < tau < 1.0):
             raise ValueError(f"tau must be strictly in (0, 1), got {tau}")
         if not (0.0 <= gamma <= 1.0):

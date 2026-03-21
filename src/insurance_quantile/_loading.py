@@ -26,6 +26,8 @@ which is estimated numerically from the quantile predictions.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import polars as pl
 
@@ -35,11 +37,72 @@ _trapezoid = getattr(np, "trapezoid", None) or np.trapz
 __all__ = [
     "large_loss_loading",
     "ilf",
+    "MeanModelWrapper",
 ]
 
 
+class MeanModelWrapper:
+    """
+    Wraps any mean-prediction model so it can be used with large_loss_loading.
+
+    The main use case is raw CatBoostRegressor, sklearn regressors, and other
+    estimators whose predict() method does not accept Polars DataFrames. This
+    wrapper converts the Polars DataFrame to a float64 numpy array before
+    calling predict(), and returns a Polars Series with name "mean".
+
+    This is the public version of the internal test helper. Use it when you want
+    an explicit, documented contract rather than relying on the silent try/except
+    fallback inside large_loss_loading.
+
+    Parameters
+    ----------
+    model:
+        Any fitted model with a predict(X) method where X is a numpy array.
+        Typical choices: CatBoostRegressor, sklearn GradientBoostingRegressor,
+        XGBRegressor, or any sklearn-compatible estimator.
+
+    Examples
+    --------
+    >>> from catboost import CatBoostRegressor
+    >>> from insurance_quantile import large_loss_loading, MeanModelWrapper
+    >>> cb = CatBoostRegressor(loss_function="Tweedie:variance_power=1.5",
+    ...                        iterations=200, verbose=0)
+    >>> cb.fit(X_train.to_numpy(), y_train.to_numpy())
+    >>> mean_model = MeanModelWrapper(cb)
+    >>> loading = large_loss_loading(mean_model, quantile_model, X_val, alpha=0.95)
+
+    Notes
+    -----
+    large_loss_loading already performs a silent try/except fallback to numpy
+    for models that raise TypeError on Polars input. MeanModelWrapper makes this
+    explicit — use it when you prefer clarity over magic, or when the model raises
+    a different exception type that the fallback does not catch.
+    """
+
+    def __init__(self, model: Any) -> None:
+        self._model = model
+
+    def predict(self, X: pl.DataFrame) -> pl.Series:
+        """
+        Call self._model.predict() with a float64 numpy array.
+
+        Parameters
+        ----------
+        X:
+            Feature matrix as a Polars DataFrame. Converted to numpy float64
+            before being passed to the wrapped model.
+
+        Returns
+        -------
+        Polars Series named "mean" containing the wrapped model's predictions.
+        """
+        X_np = X.to_numpy().astype(np.float64)
+        vals = self._model.predict(X_np)
+        return pl.Series("mean", np.asarray(vals, dtype=np.float64))
+
+
 def large_loss_loading(
-    model_mean: "Any",  # noqa: F821 — Tweedie/GBM model with .predict(X) -> array-like
+    model_mean: Any,
     model_quantile: "QuantileGBM",  # noqa: F821
     X: pl.DataFrame,
     alpha: float = 0.95,
@@ -60,7 +123,8 @@ def large_loss_loading(
         Accepts models that take Polars DataFrames, numpy arrays, or both.
         For raw CatBoostRegressor or sklearn estimators that do not accept
         Polars DataFrames, the feature matrix is automatically converted to
-        a numpy array before prediction.
+        a numpy array before prediction. Alternatively, wrap the model in
+        MeanModelWrapper for an explicit, documented conversion.
     model_quantile:
         A fitted QuantileGBM, used to derive TVaR_alpha per risk.
     X:
@@ -82,6 +146,10 @@ def large_loss_loading(
     model_mean predicts claim frequency separately and model_quantile was
     fitted on severity, the scales will differ. Ensure consistency in how
     both models were trained.
+
+    If model_mean is a raw CatBoostRegressor or sklearn estimator that does
+    not accept Polars DataFrames, this function will automatically retry with
+    a numpy array. For explicit control, wrap the model in MeanModelWrapper.
     """
     from ._tvar import per_risk_tvar
 

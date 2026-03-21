@@ -14,6 +14,10 @@ Actuarial functions:
 - exceedance_curve / oep_curve: portfolio exceedance probability curves
 - coverage_check / pinball_loss: calibration diagnostics
 
+Mean model integration:
+- MeanModelWrapper: wraps any numpy-based regressor (CatBoost, sklearn) so it
+  can be passed to large_loss_loading without Polars compatibility issues.
+
 Two-part quantile premium:
 - TwoPartQuantilePremium: frequency-severity QPP decomposition at explicit
   aggregate confidence level tau. Solves the zero-inflation problem for
@@ -45,13 +49,13 @@ UK personal lines context:
 
 from ._calibration import coverage_check, pinball_loss, quantile_calibration_plot
 from ._exceedance import exceedance_curve, oep_curve
-from ._loading import ilf, large_loss_loading
+from ._loading import ilf, large_loss_loading, MeanModelWrapper
 from ._model import QuantileGBM
 from ._tvar import per_risk_tvar, portfolio_tvar
 from ._two_part import TwoPartQuantilePremium
 from ._types import ExceedanceCurve, QuantileSpec, TailModel, TwoPartResult, TVaRResult
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 __all__ = [
     # Core GBM model
@@ -68,6 +72,7 @@ __all__ = [
     # Loading / ILF
     "large_loss_loading",
     "ilf",
+    "MeanModelWrapper",
     # Exceedance
     "exceedance_curve",
     "oep_curve",

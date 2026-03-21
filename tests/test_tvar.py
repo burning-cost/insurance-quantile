@@ -62,6 +62,66 @@ class TestPerRiskTVaR:
         mean_tvar = float(result.values.mean())
         assert abs(mean_tvar - analytical_tvar) < 1.5, f"TVaR far off: {mean_tvar}"
 
+    def test_tvar_trapz_formula_correctness(self):
+        """
+        Verify that the trapezoidal integration formula produces < 5% relative error
+        when given exact analytical quantile predictions.
+
+        This test bypasses model fitting uncertainty by using a mock QuantileGBM
+        whose predict() method returns the true Exponential(1) quantile function:
+            Q(u) = -ln(1 - u)
+
+        For Exponential(rate=1) with alpha=0.9:
+            TVaR_0.9 = E[Y | Y > Q(0.9)] = Q(0.9) + 1 = -ln(0.1) + 1 ≈ 3.3026
+
+        With exact quantile predictions at levels [0.9, 0.95, 0.975, 0.99, 0.999],
+        the trapezoidal integral should recover TVaR to within 5% relative, since
+        the quantile function of the exponential is smooth on this interval.
+
+        Note: simple mean of quantile levels would give equal weight to Q(0.95)
+        and Q(0.99) despite them spanning very different tail fractions (5% vs 4%
+        of the distribution). The trapezoidal rule correctly weights by interval
+        width, giving more accurate TVaR.
+        """
+
+        class _AnalyticalExponentialModel:
+            """
+            Mock QuantileGBM returning exact Exp(1) quantile predictions.
+            Bypasses CatBoost fitting so the test isolates the integration formula.
+            """
+
+            class spec:
+                quantiles = [0.9, 0.95, 0.975, 0.99, 0.999]
+                column_names = ["q_0.9", "q_0.95", "q_0.975", "q_0.99", "q_0.999"]
+
+            def predict(self, X: pl.DataFrame) -> pl.DataFrame:
+                n = len(X)
+                data = {}
+                for q in self.spec.quantiles:
+                    col = f"q_{q}"
+                    # Exact Exp(1) quantile function: Q(u) = -ln(1-u)
+                    val = -np.log(1.0 - q)
+                    data[col] = [val] * n
+                return pl.DataFrame(data)
+
+        n = 10
+        X_dummy = pl.DataFrame({"x": np.zeros(n)})
+        model = _AnalyticalExponentialModel()
+
+        result = per_risk_tvar(model, X_dummy, alpha=0.9)
+
+        # Analytical TVaR_0.9 for Exp(1): Q(0.9) + 1/rate = -ln(0.1) + 1
+        analytical_tvar = -np.log(0.1) + 1.0  # ≈ 3.3026
+        mean_tvar = float(result.values.mean())
+
+        rel_error = abs(mean_tvar - analytical_tvar) / analytical_tvar
+        assert rel_error < 0.05, (
+            f"Trapz TVaR formula has {rel_error:.1%} relative error vs analytical "
+            f"({mean_tvar:.4f} vs {analytical_tvar:.4f}). "
+            "Check that the integration uses np.trapz(q_values, quantile_levels) / (1-alpha), "
+            "not a simple mean of quantile predictions."
+        )
+
     def test_loading_over_var(self, fitted_quantile_model, exponential_data):
         """loading_over_var = TVaR - VaR should be non-negative."""
         X, _ = exponential_data

@@ -328,16 +328,15 @@ The OLS lognormal benefits from the fact that the DGP is lognormal — a correct
 
 A ready-to-run Databricks notebook benchmarking this library against standard approaches is available in [burning-cost-examples](https://github.com/burning-cost/burning-cost-examples/blob/main/notebooks/insurance_quantile_demo.py).
 
-## Related libraries
+## Related Libraries
 
-| Library | Why it's relevant |
-|---------|------------------|
+| Library | Description |
+|---------|-------------|
+| [insurance-severity](https://github.com/burning-cost/insurance-severity) | Spliced severity models and EVT — parametric complement to quantile regression for heavy-tailed lines |
 | [insurance-conformal](https://github.com/burning-cost/insurance-conformal) | Conformalized Quantile Regression — wraps this library's output to give distribution-free coverage guarantees |
 | [insurance-distributional](https://github.com/burning-cost/insurance-distributional) | Parametric severity distributions (Pareto, Gamma, LogNormal) — alternative approach when you need closed-form tail quantities |
 | [shap-relativities](https://github.com/burning-cost/shap-relativities) | Extract what's driving the tail — SHAP values on the QuantileGBM output |
 | [insurance-cv](https://github.com/burning-cost/insurance-cv) | Walk-forward cross-validation for time-structured insurance data |
-
-[All Burning Cost libraries →](https://burning-cost.github.io)
 
 ## References
 

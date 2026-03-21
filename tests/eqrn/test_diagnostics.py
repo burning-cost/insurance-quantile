@@ -14,6 +14,11 @@ matplotlib.use("Agg")  # non-interactive backend for testing
 import matplotlib.pyplot as plt
 from scipy.stats import genpareto
 
+pytest.importorskip(
+    "torch",
+    reason="EQRN tests require torch. Install with: pip install insurance-quantile[eqrn]",
+)
+
 from insurance_quantile.eqrn import EQRNModel, EQRNDiagnostics
 
 

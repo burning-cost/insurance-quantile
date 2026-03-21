@@ -7,13 +7,23 @@ verify correctness against analytical benchmarks.
 
 Note: fixtures here use distinct names (eqrn_rng etc.) to avoid collisions
 with the parent test suite's conftest.py fixtures.
+
+All EQRN tests require torch and lightgbm. If they are not installed, the
+entire eqrn test suite is skipped. Install with:
+
+    pip install insurance-quantile[eqrn]
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
-import torch
+
+# Skip the entire eqrn test suite if torch is not installed.
+torch = pytest.importorskip(
+    "torch",
+    reason="EQRN tests require torch. Install with: pip install insurance-quantile[eqrn]",
+)
 
 
 @pytest.fixture(scope="session")

@@ -11,6 +11,11 @@ return tensors; distribution utilities return numpy arrays.
 
 Edge cases at xi ~ 0 (exponential limit) are handled throughout with Taylor
 series or L'Hopital expansions to avoid 0/0 numerical instability.
+
+Torch is only required for the loss functions (ogpd_loss_tensor,
+sigma_from_nu_xi). All distribution utility functions (gpd_quantile,
+gpd_survival, gpd_log_density, gpd_nll, gpd_tvar, eqrn_quantile,
+eqrn_tvar, eqrn_exceedance_prob, eqrn_xl_layer) use only numpy.
 """
 
 from __future__ import annotations
@@ -19,8 +24,6 @@ import warnings
 from typing import Union
 
 import numpy as np
-import torch
-import torch.nn.functional as F
 from scipy import stats
 
 # numpy<2.0 compat: trapezoid was added in 2.0, trapz deprecated/removed in 2.0
@@ -428,11 +431,11 @@ def eqrn_xl_layer(
 
 
 def ogpd_loss_tensor(
-    z: torch.Tensor,
-    nu: torch.Tensor,
-    xi: torch.Tensor,
+    z,
+    nu,
+    xi,
     reduction: str = "mean",
-) -> torch.Tensor:
+):
     """Orthogonal GPD deviance loss for EQRN training.
 
     Implements the negative log-likelihood in the (nu, xi) orthogonal
@@ -445,11 +448,13 @@ def ogpd_loss_tensor(
     ----------
     z:
         Excess values z_i = y_i - u(x_i) > 0. Shape (n_exceedances,).
+        Must be a torch.Tensor.
     nu:
         Orthogonal scale parameter nu = sigma * (xi + 1). Shape (n_exceedances,).
-        Must be > 0.
+        Must be > 0. Must be a torch.Tensor.
     xi:
         Shape parameter. Shape (n_exceedances,). Constrained to (-0.5, 0.7).
+        Must be a torch.Tensor.
     reduction:
         'mean' (default), 'sum', or 'none'. Controls aggregation.
 
@@ -466,7 +471,12 @@ def ogpd_loss_tensor(
     - Infeasible samples where the inner term <= 0 are masked out; they do not
       contribute to the gradient. This prevents gradient distortion from
       constraint violations during early training.
+
+    Requires torch to be installed. Install with:
+        pip install insurance-quantile[eqrn]
     """
+    import torch
+
     # Inner argument: 1 + xi*(xi+1)*z/nu
     inner = 1.0 + xi * (xi + 1.0) * z / nu
 
@@ -505,20 +515,23 @@ def ogpd_loss_tensor(
         return loss_per_sample.sum() / n_feasible
 
 
-def sigma_from_nu_xi(nu: torch.Tensor, xi: torch.Tensor) -> torch.Tensor:
+def sigma_from_nu_xi(nu, xi):
     """Recover sigma from orthogonal parameterisation: sigma = nu / (xi + 1).
 
     Parameters
     ----------
     nu:
-        Orthogonal scale parameter (> 0).
+        Orthogonal scale parameter (> 0). Must be a torch.Tensor.
     xi:
-        Shape parameter (> -1).
+        Shape parameter (> -1). Must be a torch.Tensor.
 
     Returns
     -------
     torch.Tensor
         Scale parameter sigma.
+
+    Requires torch to be installed. Install with:
+        pip install insurance-quantile[eqrn]
     """
     return nu / (xi + 1.0)
 

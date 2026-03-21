@@ -18,7 +18,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-import torch
+torch = pytest.importorskip(
+    "torch",
+    reason="EQRN tests require torch. Install with: pip install insurance-quantile[eqrn]",
+)
 from scipy.stats import genpareto
 
 from insurance_quantile.eqrn.gpd import (

@@ -17,16 +17,17 @@ Primary interface::
     q995 = model.predict_quantile(X_test, q=0.995)
     tvar_99 = model.predict_tvar(X_test, q=0.99)
 
+Torch and lightgbm are optional dependencies — install with:
+
+    pip install insurance-quantile[eqrn]
+
 Reference:
     Pasche, O.C. & Engelke, S. (2024). "Neural networks for extreme quantile
     regression with an application to forecasting of flood risk."
     Annals of Applied Statistics, 18(4), 2818-2839. DOI:10.1214/24-AOAS1907.
 """
 
-from .model import EQRNModel
-from .diagnostics import EQRNDiagnostics
-from .intermediate import IntermediateQuantileEstimator
-from .network import GPDNet
+# Exports from pure-numpy submodules (no torch required)
 from .gpd import (
     gpd_quantile,
     gpd_survival,
@@ -58,3 +59,41 @@ __all__ = [
     "ogpd_loss_tensor",
     "ogpd_loss_analytical",
 ]
+
+
+def __getattr__(name: str):
+    """
+    Lazy import for classes that require torch: EQRNModel, EQRNDiagnostics,
+    GPDNet, IntermediateQuantileEstimator.
+
+    Importing this subpackage does not require torch. Torch is only loaded
+    when you access one of these classes. Install with:
+
+        pip install insurance-quantile[eqrn]
+    """
+    _torch_classes = {"EQRNModel", "EQRNDiagnostics", "GPDNet", "IntermediateQuantileEstimator"}
+    if name in _torch_classes:
+        try:
+            import torch as _  # noqa: F401 — validate torch is available
+        except ImportError:
+            raise ImportError(
+                f"'{name}' requires torch and lightgbm to be installed. "
+                "Install them with: pip install insurance-quantile[eqrn]"
+            )
+        if name == "EQRNModel":
+            from .model import EQRNModel
+            globals()["EQRNModel"] = EQRNModel
+            return EQRNModel
+        if name == "EQRNDiagnostics":
+            from .diagnostics import EQRNDiagnostics
+            globals()["EQRNDiagnostics"] = EQRNDiagnostics
+            return EQRNDiagnostics
+        if name == "GPDNet":
+            from .network import GPDNet
+            globals()["GPDNet"] = GPDNet
+            return GPDNet
+        if name == "IntermediateQuantileEstimator":
+            from .intermediate import IntermediateQuantileEstimator
+            globals()["IntermediateQuantileEstimator"] = IntermediateQuantileEstimator
+            return IntermediateQuantileEstimator
+    raise AttributeError(f"module 'insurance_quantile.eqrn' has no attribute '{name}'")

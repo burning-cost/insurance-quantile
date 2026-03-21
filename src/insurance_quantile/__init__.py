@@ -32,7 +32,9 @@ EQRN subpackage (insurance_quantile.eqrn):
 
 The EQRN classes are imported lazily: they are only loaded when accessed.
 This means `import insurance_quantile` does NOT require torch to be installed.
-Torch is only required when you actually use EQRNModel or related classes.
+Torch and lightgbm are optional — install them with:
+
+    pip install insurance-quantile[eqrn]
 
 Integration: QuantileGBM output can feed directly into insurance-conformal
 for Conformalized Quantile Regression (CQR), providing distribution-free
@@ -55,7 +57,7 @@ from ._tvar import per_risk_tvar, portfolio_tvar
 from ._two_part import TwoPartQuantilePremium
 from ._types import ExceedanceCurve, QuantileSpec, TailModel, TwoPartResult, TVaRResult
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 __all__ = [
     # Core GBM model
@@ -82,7 +84,7 @@ __all__ = [
     "quantile_calibration_plot",
     # Two-part quantile premium
     "TwoPartQuantilePremium",
-    # EQRN (extreme quantile neural net) — lazy imports, requires torch
+    # EQRN (extreme quantile neural net) — lazy imports, requires torch+lightgbm
     "EQRNModel",
     "EQRNDiagnostics",
     "GPDNet",
@@ -94,11 +96,13 @@ __all__ = [
 
 def __getattr__(name: str):
     """
-    Lazy import for EQRN classes that require torch.
+    Lazy import for EQRN classes that require torch and lightgbm.
 
-    Torch is a large optional dependency (~2GB). We defer the import until
-    the user actually accesses one of these classes, so that the rest of the
-    library can be used without torch installed.
+    torch (~2GB) and lightgbm are optional dependencies only needed for EQRN.
+    We defer the import until the user actually accesses one of these classes,
+    so that the rest of the library works without them installed.
+
+    Install with: pip install insurance-quantile[eqrn]
     """
     _eqrn_names = {"EQRNModel", "EQRNDiagnostics", "GPDNet", "IntermediateQuantileEstimator"}
     if name in _eqrn_names:
@@ -106,8 +110,8 @@ def __getattr__(name: str):
             from . import eqrn as _eqrn_mod
         except ImportError as e:
             raise ImportError(
-                f"'{name}' requires torch to be installed. "
-                "Install it with: pip install torch\n"
+                f"'{name}' requires torch and lightgbm to be installed. "
+                "Install them with: pip install insurance-quantile[eqrn]\n"
                 f"Original error: {e}"
             ) from e
         obj = getattr(_eqrn_mod, name)

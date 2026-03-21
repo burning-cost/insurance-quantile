@@ -14,6 +14,11 @@ import numpy as np
 import pytest
 from scipy.stats import genpareto
 
+pytest.importorskip(
+    "torch",
+    reason="EQRN tests require torch. Install with: pip install insurance-quantile[eqrn]",
+)
+
 from insurance_quantile.eqrn.intermediate import IntermediateQuantileEstimator
 
 

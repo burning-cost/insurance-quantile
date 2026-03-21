@@ -3,6 +3,8 @@
 
 Actuarial tail risk quantile and expectile regression for UK personal lines pricing.
 
+**Blog post:** [Quantile GBMs for Insurance: TVaR, ILFs, and Large Loss Loadings](https://burning-cost.github.io/2026/03/07/insurance-quantile/)
+
 Wraps CatBoost's native `MultiQuantile` loss with the vocabulary actuaries actually use: TVaR, large loss loading, ILFs, OEP curves. Polars in, Polars out.
 
 ## The problem
@@ -27,6 +29,8 @@ For heavy-tailed lines (motor BI, liability), expectile mode is available. Expec
 ```bash
 pip install insurance-quantile
 ```
+
+> 💬 Questions or feedback? Start a [Discussion](https://github.com/burning-cost/insurance-quantile/discussions). Found it useful? A ⭐ helps others find it.
 
 ## Quick start
 

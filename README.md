@@ -27,7 +27,7 @@ For heavy-tailed lines (motor BI, liability), expectile mode is available. Expec
 ## Installation
 
 ```bash
-pip install insurance-quantile
+uv add insurance-quantile
 ```
 
 > 💬 Questions or feedback? Start a [Discussion](https://github.com/burning-cost/insurance-quantile/discussions). Found it useful? A ⭐ helps others find it.

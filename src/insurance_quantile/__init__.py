@@ -57,7 +57,12 @@ from ._tvar import per_risk_tvar, portfolio_tvar
 from ._two_part import TwoPartQuantilePremium
 from ._types import ExceedanceCurve, QuantileSpec, TailModel, TwoPartResult, TVaRResult
 
-__version__ = "0.3.3"
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("insurance-quantile")
+except PackageNotFoundError:
+    __version__ = "0.0.0"  # not installed
 
 __all__ = [
     # Core GBM model

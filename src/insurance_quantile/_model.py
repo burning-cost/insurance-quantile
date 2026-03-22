@@ -333,6 +333,18 @@ class QuantileGBM:
                 "with a lower alpha."
             )
 
+        max_quantile = max(self._spec.quantiles)
+        if alpha >= max_quantile:
+            import warnings
+            warnings.warn(
+                f"alpha={alpha} is at or above the highest modelled quantile level "
+                f"({max_quantile}). The TVaR estimate will be unreliable because "
+                "trapezoidal integration requires quantile levels well above alpha. "
+                f"Add quantile levels above {alpha} when fitting the model.",
+                UserWarning,
+                stacklevel=2,
+            )
+
         col_names = [f"q_{q}" for q in above_any]
         preds_df = self.predict(X)
         tail_vals = np.stack([preds_df[c].to_numpy() for c in col_names], axis=1)

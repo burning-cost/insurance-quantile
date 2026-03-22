@@ -33,6 +33,7 @@ is handled correctly.
 
 from __future__ import annotations
 
+import warnings
 import numpy as np
 import polars as pl
 
@@ -98,6 +99,17 @@ def per_risk_tvar(
             f"Model has no quantile levels above alpha={alpha}. "
             f"Model quantiles: {model.spec.quantiles}. "
             "Add higher quantile levels (e.g. 0.99) when constructing QuantileGBM."
+        )
+
+    max_quantile = max(model.spec.quantiles)
+    if alpha >= max_quantile:
+        warnings.warn(
+            f"alpha={alpha} is at or above the highest modelled quantile level "
+            f"({max_quantile}). The TVaR estimate will be unreliable because "
+            "trapezoidal integration requires quantile levels well above alpha. "
+            f"Add quantile levels above {alpha} when constructing QuantileGBM.",
+            UserWarning,
+            stacklevel=2,
         )
 
     preds = model.predict(X)

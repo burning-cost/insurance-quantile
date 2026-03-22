@@ -7,7 +7,7 @@ name = "insurance-quantile"
 version = "0.3.3"
 description = "Actuarial tail risk quantile and expectile regression for UK personal lines pricing, including EQRN extreme quantile neural nets (Pasche & Engelke 2024)"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
 authors = [
     { name = "Burning Cost", email = "pricing.frontier@gmail.com" },
 ]

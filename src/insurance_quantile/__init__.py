@@ -24,6 +24,15 @@ Two-part quantile premium:
   UK motor OD, property and liability pricing.
 - TwoPartResult: per-policy premiums, loadings, and diagnostic fields.
 
+Wasserstein Distributionally Robust Quantile Regression:
+- WassersteinRobustQR: closed-form robust QR under p-Wasserstein ambiguity
+  (Zhang, Mao & Wang 2026). O(N^{-1/2}) finite-sample guarantee, dimension-free.
+  Best for thin-data segments (N < 500) at high quantiles (tau >= 0.95).
+- wdrqr_large_loss_loading: robust large loss loading with distribution shift
+  uncertainty formalised via Wasserstein ball radius.
+- wdrqr_reserve_quantile: per-risk robust reserve quantile for Solvency II
+  capital allocation.
+
 EQRN subpackage (insurance_quantile.eqrn):
 - EQRNModel: extreme quantile regression neural network (Pasche & Engelke 2024)
 - EQRNDiagnostics: GPD QQ, calibration, threshold stability plots
@@ -47,12 +56,15 @@ UK personal lines context:
 - Zero-inflated data (majority zero claims): model severity on non-zero
   claims; frequency separately. Document this in your model sign-off.
 - Reinsurance / XL layers: use EQRNModel for covariate-dependent GPD tail
+- Thin segments (N < 500) needing formal out-of-sample guarantee: use
+  WassersteinRobustQR with the Theorem 3 eps schedule.
 """
 
 from ._calibration import coverage_check, pinball_loss, quantile_calibration_plot
 from ._exceedance import exceedance_curve, oep_curve
 from ._loading import ilf, large_loss_loading, MeanModelWrapper
 from ._model import QuantileGBM
+from ._robust import WassersteinRobustQR, wdrqr_large_loss_loading, wdrqr_reserve_quantile
 from ._tvar import per_risk_tvar, portfolio_tvar
 from ._two_part import TwoPartQuantilePremium
 from ._types import ExceedanceCurve, QuantileSpec, TailModel, TwoPartResult, TVaRResult
@@ -89,6 +101,10 @@ __all__ = [
     "quantile_calibration_plot",
     # Two-part quantile premium
     "TwoPartQuantilePremium",
+    # Wasserstein robust QR
+    "WassersteinRobustQR",
+    "wdrqr_large_loss_loading",
+    "wdrqr_reserve_quantile",
     # EQRN (extreme quantile neural net) — lazy imports, requires torch+lightgbm
     "EQRNModel",
     "EQRNDiagnostics",

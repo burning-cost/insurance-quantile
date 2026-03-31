@@ -202,7 +202,32 @@ def _fit_slope_and_intercept(
             grad_reg = np.zeros(d)
         return grad_loss + grad_reg
 
-    beta0 = np.zeros(d)
+    # Warm-start from standard QR (eps=0) to avoid the L2 norm
+    # non-differentiability at beta=0. Without this, the optimizer can get
+    # stuck at beta=0 because the sub-gradient of ||beta|| is zero there.
+    if eps > 0.0:
+        def objective_std(beta: np.ndarray) -> float:
+            residuals_no_intercept = y - X @ beta
+            s_bar = float(np.quantile(residuals_no_intercept, tau))
+            return _check_loss(residuals_no_intercept - s_bar, tau)
+
+        def gradient_std(beta: np.ndarray) -> np.ndarray:
+            residuals_no_intercept = y - X @ beta
+            s_bar = float(np.quantile(residuals_no_intercept, tau))
+            weights = tau - ((residuals_no_intercept - s_bar) < 0).astype(np.float64)
+            return -X.T @ weights / N
+
+        result_std = minimize(
+            objective_std,
+            np.zeros(d),
+            jac=gradient_std,
+            method="L-BFGS-B",
+            options={"maxiter": 2000, "ftol": 1e-12, "gtol": 1e-8},
+        )
+        beta0 = result_std.x
+    else:
+        beta0 = np.zeros(d)
+
     result = minimize(
         objective,
         beta0,

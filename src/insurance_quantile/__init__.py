@@ -33,6 +33,13 @@ Wasserstein Distributionally Robust Quantile Regression:
 - wdrqr_reserve_quantile: per-risk robust reserve quantile for Solvency II
   capital allocation.
 
+Direct Expected Shortfall Regression:
+- ExpectedShortfallRegressor: direct ES regression via the i-Rock estimator
+  (Li, Zhang & He 2026, arXiv:2602.18865). Estimates ES(alpha, x) = x^T beta
+  directly with asymptotic inference, no two-step quantile integration required.
+  Best when you need formal SE/p-values for ES coefficients (motor BI pricing,
+  Solvency II SCR at 99.5th percentile, reinsurance layer pricing).
+
 EQRN subpackage (insurance_quantile.eqrn):
 - EQRNModel: extreme quantile regression neural network (Pasche & Engelke 2024)
 - EQRNDiagnostics: GPD QQ, calibration, threshold stability plots
@@ -58,9 +65,11 @@ UK personal lines context:
 - Reinsurance / XL layers: use EQRNModel for covariate-dependent GPD tail
 - Thin segments (N < 500) needing formal out-of-sample guarantee: use
   WassersteinRobustQR with the Theorem 3 eps schedule.
+- ES regression with inference: use ExpectedShortfallRegressor (i-Rock)
 """
 
 from ._calibration import coverage_check, pinball_loss, quantile_calibration_plot
+from ._es_regressor import ExpectedShortfallRegressor
 from ._exceedance import exceedance_curve, oep_curve
 from ._loading import ilf, large_loss_loading, MeanModelWrapper
 from ._model import QuantileGBM
@@ -105,6 +114,8 @@ __all__ = [
     "WassersteinRobustQR",
     "wdrqr_large_loss_loading",
     "wdrqr_reserve_quantile",
+    # Direct ES regression (i-Rock)
+    "ExpectedShortfallRegressor",
     # EQRN (extreme quantile neural net) — lazy imports, requires torch+lightgbm
     "EQRNModel",
     "EQRNDiagnostics",

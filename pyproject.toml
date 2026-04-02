@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "insurance-quantile"
-version = "0.4.0"
+version = "0.5.0"
 description = "Actuarial tail risk quantile and expectile regression for UK personal lines pricing, including EQRN extreme quantile neural nets (Pasche & Engelke 2024)"
 readme = "README.md"
 license = "MIT"
@@ -31,6 +31,9 @@ keywords = [
     "two-part model",
     "quantile premium principle",
     "safety loading",
+    "expected shortfall",
+    "ES regression",
+    "i-Rock",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

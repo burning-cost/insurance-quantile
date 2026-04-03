@@ -1244,8 +1244,8 @@ class TestMathematicalInvariants:
                 return pl.Series("mean", np.full(len(X), 1.0))
 
         loading_75 = large_loss_loading(ConstantMean(), fitted_quantile_model, X_small, alpha=0.75)
-        loading_99 = large_loss_loading(ConstantMean(), fitted_quantile_model, X_small, alpha=0.99)
-        assert float(loading_99.mean()) > float(loading_75.mean())
+        loading_95 = large_loss_loading(ConstantMean(), fitted_quantile_model, X_small, alpha=0.95)
+        assert float(loading_95.mean()) > float(loading_75.mean())
 
     def test_pinball_loss_minimised_at_true_quantile(self):
         """

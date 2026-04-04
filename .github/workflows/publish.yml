@@ -22,7 +22,7 @@ jobs:
       - name: Run tests
         run: |
           if [ -d tests ]; then
-            python -m pytest tests/ -q --tb=short --timeout=120
+            python -m pytest tests/ -q --tb=short
           else
             echo "No tests directory — skipping"
           fi

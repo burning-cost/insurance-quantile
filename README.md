@@ -1,5 +1,6 @@
 # insurance-quantile
-[![Tests](https://github.com/burning-cost/insurance-quantile/actions/workflows/tests.yml/badge.svg)](https://github.com/burning-cost/insurance-quantile/actions/workflows/tests.yml)
+
+[![Tests](https://github.com/burning-cost/insurance-quantile/actions/workflows/tests.yml/badge.svg)](https://github.com/burning-cost/insurance-quantile/actions/workflows/tests.yml) [![PyPI](https://img.shields.io/pypi/v/insurance-quantile)](https://pypi.org/project/insurance-quantile/) [![Downloads](https://img.shields.io/pypi/dm/insurance-quantile)](https://pypi.org/project/insurance-quantile/) [![Python](https://img.shields.io/pypi/pyversions/insurance-quantile)](https://pypi.org/project/insurance-quantile/) [![License](https://img.shields.io/pypi/l/insurance-quantile)](https://pypi.org/project/insurance-quantile/)
 
 Actuarial tail risk quantile and expectile regression for UK personal lines pricing.
 
